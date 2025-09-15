@@ -1,14 +1,21 @@
 defmodule Texture.MixProject do
   use Mix.Project
 
+  @source_url "https://github.com/lud/texture"
+  @version "0.0.0"
+
   def project do
     [
       app: :texture,
-      version: "0.1.0",
+      description: "A collection of structured text parsers.",
+      version: @version,
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: dialyzer()
+      source_url: @source_url,
+      package: package(),
+      dialyzer: dialyzer(),
+      versioning: versioning()
     ]
   end
 
@@ -39,6 +46,33 @@ defmodule Texture.MixProject do
         dialyzer: :test
       ]
     ]
+  end
+
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{
+        "Github" => @source_url,
+        "Changelog" => "https://github.com/lud/texture/blob/main/CHANGELOG.md"
+      }
+    ]
+  end
+
+  defp versioning do
+    [
+      annotate: true,
+      before_commit: [
+        &gen_changelog/1,
+        {:add, "CHANGELOG.md"}
+      ]
+    ]
+  end
+
+  defp gen_changelog(vsn) do
+    case System.cmd("git", ["cliff", "--tag", vsn, "-o", "CHANGELOG.md"], stderr_to_stdout: true) do
+      {_, 0} -> IO.puts("Updated CHANGELOG.md with #{vsn}")
+      {out, _} -> {:error, "Could not update CHANGELOG.md:\n\n #{out}"}
+    end
   end
 
   defp dialyzer do
