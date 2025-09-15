@@ -1,11 +1,188 @@
 defmodule Texture.HttpStructuredField do
   alias Texture.HttpStructuredField.Parser
 
-  @moduledoc """
+  @moduledoc ~S"""
   HTTP Structured Field parser implementation following RFC 8941.
+
+  This module exposes high-level helpers to parse the three Structured Field
+  top-level types defined by the RFC:
+
+    * items (single bare item with optional parameters)
+    * lists (comma separated sequence of items or inner lists)
+    * dictionaries (comma separated key / item pairs – bare keys imply a true boolean)
+
+  Returned data is, by default, tagged with the parsed value type. You can opt
+  into two orthogonal transformations using options:
+
+    * `unwrap: true` – remove the type tag wrapper from items and attributes
+    * `maps: true` – turn attribute collections and dictionaries into maps
+
+  ## Shapes
+
+  By default (no options):
+
+    * item: `{type, value, attributes}`
+    * attribute: `{key, {type, value}}`
+    * inner list: `{:inner_list, [item, ...], attributes}`
+    * dictionary: list of `{key, item}` tuples
+
+  With `unwrap: true`:
+
+    * item: `{value, attributes}` (type tag removed)
+    * attribute: `{key, value}`
+    * inner list: `{[unwrapped_item, ...], attributes}`
+
+  With `maps: true`:
+
+    * attribute collections (item / inner list parameters) become a `%{key => attr}` map
+    * dictionary becomes a `%{key => item}` map
+
+  Both options compose: `unwrap: true, maps: true` yields unwrapped values and
+  maps for every attribute / dictionary collection.
+
+  ## Parsing a single item
+
+  An item with no parameters:
+
+      iex> Texture.HttpStructuredField.parse_item("123")
+      {:ok, {:integer, 123, []}}
+
+  Item with boolean (implicit) and integer parameters:
+
+      iex> Texture.HttpStructuredField.parse_item("123;a;b=5")
+      {:ok, {:integer, 123, [
+        {"a", {:boolean, true}},
+        {"b", {:integer, 5}}
+      ]}}
+
+  Unwrapped (type tags removed):
+
+      iex> Texture.HttpStructuredField.parse_item("123;a;b=5", unwrap: true)
+      {:ok, {123, [
+        {"a", true},
+        {"b", 5}
+      ]}}
+
+  Attributes as a map (still wrapped):
+
+      iex> Texture.HttpStructuredField.parse_item("123;a;b=5", maps: true)
+      {:ok, {:integer, 123, %{"a" => {:boolean, true}, "b" => {:integer, 5}}}}
+
+  Both together (unwrapped values and attribute map):
+
+      iex> Texture.HttpStructuredField.parse_item("123;a;b=5", unwrap: true, maps: true)
+      {:ok, {123, %{"a" => true, "b" => 5}}}
+
+  ## Parsing a list
+
+  A list can contain bare items and inner lists:
+
+      iex> Texture.HttpStructuredField.parse_list("123, \"hi\";a=1, (1 2 3);p")
+      {:ok, [
+        {:integer, 123, []},
+        {:string, "hi", [{"a", {:integer, 1}}]},
+        {:inner_list, [
+          {:integer, 1, []},
+            {:integer, 2, []},
+            {:integer, 3, []}
+        ], [{"p", {:boolean, true}}]}
+      ]}
+
+  Unwrapping removes all type tags recursively:
+
+      iex> Texture.HttpStructuredField.parse_list("123, \"hi\";a=1, (1 2 3);p", unwrap: true)
+      {:ok, [
+        {123, []},
+        {"hi", [{"a", 1}]},
+        {[
+          {1, []},
+          {2, []},
+          {3, []}
+        ], [{"p", true}]}
+      ]}
+
+  Using maps for attributes (note inner list parameter map):
+
+      iex> Texture.HttpStructuredField.parse_list("123, \"hi\";a=1, (1 2 3);p", unwrap: true, maps: true)
+      {:ok, [
+        {123, %{}},
+        {"hi", %{"a" => 1}},
+        {[
+          {1, %{}},
+          {2, %{}},
+          {3, %{}},
+        ], %{"p" => true}}
+      ]}
+
+  ## Parsing a dictionary
+
+  Example with explicit and implicit boolean members plus inner list:
+
+      iex> Texture.HttpStructuredField.parse_dict("foo=123, bar, baz=\"hi\";a=1;b=2, qux=(1 2);p")
+      {:ok, [
+        {"foo", {:integer, 123, []}},
+        {"bar", {:boolean, true, []}},
+        {"baz", {:string, "hi", [
+          {"a", {:integer, 1}},
+          {"b", {:integer, 2}}
+        ]}},
+        {"qux", {:inner_list, [
+          {:integer, 1, []},
+          {:integer, 2, []}
+        ], [{"p", {:boolean, true}}]}}
+      ]}
+
+  Unwrapped:
+
+      iex> Texture.HttpStructuredField.parse_dict("foo=123, bar, baz=\"hi\";a=1;b=2, qux=(1 2);p", unwrap: true)
+      {:ok, [
+        {"foo", {123, []}},
+        {"bar", {true, []}},
+        {"baz", {"hi", [{"a", 1}, {"b", 2}]}},
+        {"qux", {[
+          {1, []},
+          {2, []}
+        ], [{"p", true}]}}
+      ]}
+
+  As a map (still wrapped):
+
+      iex> Texture.HttpStructuredField.parse_dict("foo=123, bar, baz=\"hi\";a=1;b=2, qux=(1 2);p", maps: true)
+      {:ok, %{
+        "foo" => {:integer, 123, %{}},
+        "bar" => {:boolean, true, %{}},
+        "baz" => {:string, "hi", %{"a" => {:integer, 1}, "b" => {:integer, 2}}},
+        "qux" => {:inner_list, [
+          {:integer, 1, %{}},
+          {:integer, 2, %{}}
+        ], %{"p" => {:boolean, true}}}
+      }}
+
+  Maps + Unwrapped:
+
+      iex> Texture.HttpStructuredField.parse_dict("foo=123, bar, baz=\"hi\";a=1;b=2, qux=(1 2);p", unwrap: true, maps: true)
+      {:ok, %{
+        "foo" => {123, %{}},
+        "bar" => {true, %{}},
+        "baz" => {"hi", %{"a" => 1, "b" => 2}},
+        "qux" => {[
+          {1, %{}},
+          {2, %{}},
+        ], %{"p" => true}}
+      }}
+
+  ## Error handling
+
+  On invalid input an `{:error, {reason, remainder}}` tuple is returned:
+
+      iex> Texture.HttpStructuredField.parse_item("not@@valid")
+      {:error, {:invalid_value, "not@@valid"}}
+
+  The low-level tokenization lives in the private `Parser` module; only the
+  post-processing (unwrap / maps) occurs here.
   """
 
-  @type option :: {:maps, boolean} | {:unwrap | boolean}
+  @type option :: {:maps, boolean} | {:unwrap, boolean}
 
   @type item :: wrapped_item | unwrapped_item
   @type wrapped_item :: {tag, value, attrs}
