@@ -1,5 +1,7 @@
 defmodule Texture.UriTemplate do
-  @moduledoc false
+  @moduledoc """
+  URI Template parser implementation following RFC 6570.
+  """
   @external_resource "priv/grammars/uri-template.abnf"
 
   @enforce_keys [:parts, :raw]

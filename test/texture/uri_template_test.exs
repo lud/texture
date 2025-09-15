@@ -1,6 +1,7 @@
 defmodule Texture.UriTemplateTest do
   alias Texture.UriTemplate
   use ExUnit.Case, async: true
+  doctest UriTemplate
 
   describe "parsing to templates" do
     defp parse_template(source) do
@@ -206,10 +207,6 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      # NOTE: RFC 6570 prefix modifier keeps the trailing delimiter if it falls
-      # within the prefix length. For source "/a/b/c" the first 5 characters are
-      # "/a/b/", so the expected expansion includes the trailing slash.
-      # See RFC 6570 Section 3.2.2 examples (e.g. {+path:5} -> "/foo/").
       assert "/base/a/b/" = run_template(parsed, %{"path" => "/a/b/c"})
       assert "/base/a/b/" = run_template(parsed, %{path: "/a/b/c"})
     end
