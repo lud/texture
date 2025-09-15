@@ -9,8 +9,8 @@ defmodule Texture.UriTemplateTest do
       {:ok, parsed}
     end
 
-    defp run_template(parsed, params) do
-      UriTemplate.generate_uri(parsed, params)
+    defp render(parsed, params) do
+      UriTemplate.render(parsed, params)
     end
 
     test "simple variable expansion in path" do
@@ -18,8 +18,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/users/42" = run_template(parsed, %{"id" => "42"})
-      assert "/users/42" = run_template(parsed, %{id: "42"})
+      assert "/users/42" = render(parsed, %{"id" => "42"})
+      assert "/users/42" = render(parsed, %{id: "42"})
     end
 
     test "reserved expansion keeps reserved characters" do
@@ -27,8 +27,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/x/a/b?c=d&x=y" = run_template(parsed, %{"var" => "a/b?c=d&x=y"})
-      assert "/x/a/b?c=d&x=y" = run_template(parsed, %{var: "a/b?c=d&x=y"})
+      assert "/x/a/b?c=d&x=y" = render(parsed, %{"var" => "a/b?c=d&x=y"})
+      assert "/x/a/b?c=d&x=y" = render(parsed, %{var: "a/b?c=d&x=y"})
     end
 
     test "simple expansion percent-encodes reserved characters" do
@@ -36,8 +36,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/x/a%2Fb%3Fc%3Dd%26x%3Dy" = run_template(parsed, %{"var" => "a/b?c=d&x=y"})
-      assert "/x/a%2Fb%3Fc%3Dd%26x%3Dy" = run_template(parsed, %{var: "a/b?c=d&x=y"})
+      assert "/x/a%2Fb%3Fc%3Dd%26x%3Dy" = render(parsed, %{"var" => "a/b?c=d&x=y"})
+      assert "/x/a%2Fb%3Fc%3Dd%26x%3Dy" = render(parsed, %{var: "a/b?c=d&x=y"})
     end
 
     test "fragment expansion" do
@@ -45,8 +45,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/p#x/y" = run_template(parsed, %{"frag" => "x/y"})
-      assert "/p#x/y" = run_template(parsed, %{frag: "x/y"})
+      assert "/p#x/y" = render(parsed, %{"frag" => "x/y"})
+      assert "/p#x/y" = render(parsed, %{frag: "x/y"})
     end
 
     test "fragment expansion encodes non-reserved (unicode)" do
@@ -54,8 +54,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/p#caf%C3%A9" = run_template(parsed, %{"frag" => "café"})
-      assert "/p#caf%C3%A9" = run_template(parsed, %{frag: "café"})
+      assert "/p#caf%C3%A9" = render(parsed, %{"frag" => "café"})
+      assert "/p#caf%C3%A9" = render(parsed, %{frag: "café"})
     end
 
     test "label operator" do
@@ -63,8 +63,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/d.example" = run_template(parsed, %{"label" => "example"})
-      assert "/d.example" = run_template(parsed, %{label: "example"})
+      assert "/d.example" = render(parsed, %{"label" => "example"})
+      assert "/d.example" = render(parsed, %{label: "example"})
     end
 
     test "label operator encodes spaces" do
@@ -72,8 +72,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/d.has%20dots" = run_template(parsed, %{"label" => "has dots"})
-      assert "/d.has%20dots" = run_template(parsed, %{label: "has dots"})
+      assert "/d.has%20dots" = render(parsed, %{"label" => "has dots"})
+      assert "/d.has%20dots" = render(parsed, %{label: "has dots"})
     end
 
     test "path segment expansion with explode list" do
@@ -81,8 +81,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/api/v1/users/42" = run_template(parsed, %{"segments" => ["v1", "users", "42"]})
-      assert "/api/v1/users/42" = run_template(parsed, %{segments: ["v1", "users", "42"]})
+      assert "/api/v1/users/42" = render(parsed, %{"segments" => ["v1", "users", "42"]})
+      assert "/api/v1/users/42" = render(parsed, %{segments: ["v1", "users", "42"]})
     end
 
     test "path segment expansion without explode encodes slashes" do
@@ -90,8 +90,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/files/a%2Fb%2Fc" = run_template(parsed, %{"path" => "a/b/c"})
-      assert "/files/a%2Fb%2Fc" = run_template(parsed, %{path: "a/b/c"})
+      assert "/files/a%2Fb%2Fc" = render(parsed, %{"path" => "a/b/c"})
+      assert "/files/a%2Fb%2Fc" = render(parsed, %{path: "a/b/c"})
     end
 
     test "reserved path expansion keeps slashes" do
@@ -99,8 +99,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/files/a/b/c" = run_template(parsed, %{"path" => "/a/b/c"})
-      assert "/files/a/b/c" = run_template(parsed, %{path: "/a/b/c"})
+      assert "/files/a/b/c" = render(parsed, %{"path" => "/a/b/c"})
+      assert "/files/a/b/c" = render(parsed, %{path: "/a/b/c"})
     end
 
     test "semicolon path-style parameter" do
@@ -108,8 +108,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/users;id=42" = run_template(parsed, %{"id" => "42"})
-      assert "/users;id=42" = run_template(parsed, %{id: "42"})
+      assert "/users;id=42" = render(parsed, %{"id" => "42"})
+      assert "/users;id=42" = render(parsed, %{id: "42"})
     end
 
     test "semicolon parameter with empty string" do
@@ -117,8 +117,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/users;id" = run_template(parsed, %{"id" => ""})
-      assert "/users;id" = run_template(parsed, %{id: ""})
+      assert "/users;id" = render(parsed, %{"id" => ""})
+      assert "/users;id" = render(parsed, %{id: ""})
     end
 
     test "semicolon parameter with exploded list" do
@@ -126,8 +126,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/m;list=a;list=b" = run_template(parsed, %{"list" => ["a", "b"]})
-      assert "/m;list=a;list=b" = run_template(parsed, %{list: ["a", "b"]})
+      assert "/m;list=a;list=b" = render(parsed, %{"list" => ["a", "b"]})
+      assert "/m;list=a;list=b" = render(parsed, %{list: ["a", "b"]})
     end
 
     test "semicolon parameter with non-exploded list" do
@@ -135,8 +135,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/m;list=a,b" = run_template(parsed, %{"list" => ["a", "b"]})
-      assert "/m;list=a,b" = run_template(parsed, %{list: ["a", "b"]})
+      assert "/m;list=a,b" = render(parsed, %{"list" => ["a", "b"]})
+      assert "/m;list=a,b" = render(parsed, %{list: ["a", "b"]})
     end
 
     test "query form-style with single var" do
@@ -144,8 +144,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "?q=coffee" = run_template(parsed, %{"q" => "coffee"})
-      assert "?q=coffee" = run_template(parsed, %{q: "coffee"})
+      assert "?q=coffee" = render(parsed, %{"q" => "coffee"})
+      assert "?q=coffee" = render(parsed, %{q: "coffee"})
     end
 
     test "query form-style with multiple vars and omission" do
@@ -153,8 +153,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "?x=1024&y=768" = run_template(parsed, %{"x" => "1024", "y" => "768"})
-      assert "?x=1024" = run_template(parsed, %{"x" => "1024"})
+      assert "?x=1024&y=768" = render(parsed, %{"x" => "1024", "y" => "768"})
+      assert "?x=1024" = render(parsed, %{"x" => "1024"})
     end
 
     test "query var with empty value is present" do
@@ -162,8 +162,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "?x=" = run_template(parsed, %{"x" => ""})
-      assert "?x=" = run_template(parsed, %{x: ""})
+      assert "?x=" = render(parsed, %{"x" => ""})
+      assert "?x=" = render(parsed, %{x: ""})
     end
 
     test "query list non-exploded" do
@@ -171,8 +171,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "?list=red,green,blue" = run_template(parsed, %{"list" => ["red", "green", "blue"]})
-      assert "?list=red,green,blue" = run_template(parsed, %{list: ["red", "green", "blue"]})
+      assert "?list=red,green,blue" = render(parsed, %{"list" => ["red", "green", "blue"]})
+      assert "?list=red,green,blue" = render(parsed, %{list: ["red", "green", "blue"]})
     end
 
     test "query list exploded" do
@@ -180,8 +180,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "?list=red&list=green" = run_template(parsed, %{"list" => ["red", "green"]})
-      assert "?list=red&list=green" = run_template(parsed, %{list: ["red", "green"]})
+      assert "?list=red&list=green" = render(parsed, %{"list" => ["red", "green"]})
+      assert "?list=red&list=green" = render(parsed, %{list: ["red", "green"]})
     end
 
     test "query continuation with &" do
@@ -189,8 +189,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "?fixed=1&x=2&y=3" = run_template(parsed, %{"x" => "2", "y" => "3"})
-      assert "?fixed=1&x=2&y=3" = run_template(parsed, %{x: "2", y: "3"})
+      assert "?fixed=1&x=2&y=3" = render(parsed, %{"x" => "2", "y" => "3"})
+      assert "?fixed=1&x=2&y=3" = render(parsed, %{x: "2", y: "3"})
     end
 
     test "prefix modifier with simple expansion" do
@@ -198,8 +198,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/p/abc" = run_template(parsed, %{"var" => "abcdef"})
-      assert "/p/abc" = run_template(parsed, %{var: "abcdef"})
+      assert "/p/abc" = render(parsed, %{"var" => "abcdef"})
+      assert "/p/abc" = render(parsed, %{var: "abcdef"})
     end
 
     test "prefix modifier with reserved expansion" do
@@ -207,8 +207,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/base/a/b/" = run_template(parsed, %{"path" => "/a/b/c"})
-      assert "/base/a/b/" = run_template(parsed, %{path: "/a/b/c"})
+      assert "/base/a/b/" = render(parsed, %{"path" => "/a/b/c"})
+      assert "/base/a/b/" = render(parsed, %{path: "/a/b/c"})
     end
 
     test "unicode encoding in simple expansion" do
@@ -216,8 +216,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/q/caf%C3%A9" = run_template(parsed, %{"term" => "café"})
-      assert "/q/caf%C3%A9" = run_template(parsed, %{term: "café"})
+      assert "/q/caf%C3%A9" = render(parsed, %{"term" => "café"})
+      assert "/q/caf%C3%A9" = render(parsed, %{term: "café"})
     end
 
     test "unicode percent-encoded in reserved expansion" do
@@ -229,9 +229,9 @@ defmodule Texture.UriTemplateTest do
       # in reserved ('+') expansions. Only ASCII reserved characters like '/'
       # may remain unencoded. "東京/渋谷" becomes "%E6%9D%B1%E4%BA%AC/%E6%B8%8B%E8%B0%B7".
       assert "/u/%E6%9D%B1%E4%BA%AC/%E6%B8%8B%E8%B0%B7" =
-               run_template(parsed, %{"term" => "東京/渋谷"})
+               render(parsed, %{"term" => "東京/渋谷"})
 
-      assert "/u/%E6%9D%B1%E4%BA%AC/%E6%B8%8B%E8%B0%B7" = run_template(parsed, %{term: "東京/渋谷"})
+      assert "/u/%E6%9D%B1%E4%BA%AC/%E6%B8%8B%E8%B0%B7" = render(parsed, %{term: "東京/渋谷"})
     end
 
     test "emoji percent-encoding in query" do
@@ -239,8 +239,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "?emoji=%F0%9F%99%82" = run_template(parsed, %{"emoji" => "🙂"})
-      assert "?emoji=%F0%9F%99%82" = run_template(parsed, %{emoji: "🙂"})
+      assert "?emoji=%F0%9F%99%82" = render(parsed, %{"emoji" => "🙂"})
+      assert "?emoji=%F0%9F%99%82" = render(parsed, %{emoji: "🙂"})
     end
 
     test "undefined variable omits entire expression in path" do
@@ -248,8 +248,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/users" = run_template(parsed, %{})
-      assert "/users" = run_template(parsed, %{})
+      assert "/users" = render(parsed, %{})
+      assert "/users" = render(parsed, %{})
     end
 
     test "empty string in simple expansion contributes nothing between literals" do
@@ -257,8 +257,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/ab" = run_template(parsed, %{"empty" => ""})
-      assert "/ab" = run_template(parsed, %{empty: ""})
+      assert "/ab" = render(parsed, %{"empty" => ""})
+      assert "/ab" = render(parsed, %{empty: ""})
     end
 
     test "mixed expressions and literals" do
@@ -267,7 +267,7 @@ defmodule Texture.UriTemplateTest do
       assert {:ok, parsed} = parse_template(template)
 
       assert "https://ex.com/v1/users/42?q=caf%C3%A9&lang=fr&page=2" =
-               run_template(parsed, %{
+               render(parsed, %{
                  "ver" => "v1",
                  "res" => ["users", "42"],
                  "q" => "café",
@@ -276,7 +276,7 @@ defmodule Texture.UriTemplateTest do
                })
 
       assert "https://ex.com/v1/users/42?q=caf%C3%A9&lang=fr&page=2" =
-               run_template(parsed, %{
+               render(parsed, %{
                  ver: "v1",
                  res: ["users", "42"],
                  q: "café",
@@ -290,8 +290,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/t/0/false" = run_template(parsed, %{"num" => 0, "bool" => false})
-      assert "/t/0/false" = run_template(parsed, %{num: 0, bool: false})
+      assert "/t/0/false" = render(parsed, %{"num" => 0, "bool" => false})
+      assert "/t/0/false" = render(parsed, %{num: 0, bool: false})
     end
 
     test "empty list omits query expression (non-exploded)" do
@@ -299,8 +299,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/s" = run_template(parsed, %{"list" => []})
-      assert "/s" = run_template(parsed, %{list: []})
+      assert "/s" = render(parsed, %{"list" => []})
+      assert "/s" = render(parsed, %{list: []})
     end
 
     test "empty list omits query expression (exploded)" do
@@ -308,8 +308,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/s" = run_template(parsed, %{"list" => []})
-      assert "/s" = run_template(parsed, %{list: []})
+      assert "/s" = render(parsed, %{"list" => []})
+      assert "/s" = render(parsed, %{list: []})
     end
 
     test "empty map omits semicolon parameter block" do
@@ -317,8 +317,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "/p" = run_template(parsed, %{"map" => %{}})
-      assert "/p" = run_template(parsed, %{map: %{}})
+      assert "/p" = render(parsed, %{"map" => %{}})
+      assert "/p" = render(parsed, %{map: %{}})
     end
 
     test "fragment with prefix modifier and unicode" do
@@ -326,8 +326,8 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      assert "#caf%C3%A9-b" = run_template(parsed, %{"frag" => "café-bar"})
-      assert "#caf%C3%A9-b" = run_template(parsed, %{frag: "café-bar"})
+      assert "#caf%C3%A9-b" = render(parsed, %{"frag" => "café-bar"})
+      assert "#caf%C3%A9-b" = render(parsed, %{frag: "café-bar"})
     end
 
     test "exploded map query has no guaranteed order" do
@@ -335,10 +335,10 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      result = run_template(parsed, %{"map" => %{"a" => "1", "b" => "2"}})
+      result = render(parsed, %{"map" => %{"a" => "1", "b" => "2"}})
       assert result in ["/m?a=1&b=2", "/m?b=2&a=1"]
 
-      result2 = run_template(parsed, %{map: %{"a" => "1", "b" => "2"}})
+      result2 = render(parsed, %{map: %{"a" => "1", "b" => "2"}})
       assert result2 in ["/m?a=1&b=2", "/m?b=2&a=1"]
     end
 
@@ -347,11 +347,22 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      result = run_template(parsed, %{"map" => %{:a => 1, "b" => 2}})
+      result = render(parsed, %{"map" => %{:a => 1, "b" => 2}})
       assert result in ["https://ex.com?a=1&b=2", "https://ex.com?b=2&a=1"]
 
-      result2 = run_template(parsed, %{map: %{"a" => 1, :b => 2}})
+      result2 = render(parsed, %{map: %{"a" => 1, :b => 2}})
       assert result2 in ["https://ex.com?a=1&b=2", "https://ex.com?b=2&a=1"]
+    end
+  end
+
+  describe "parsing invalid values" do
+    test "unfinished expression" do
+      assert {:error, {:invalid_value, "{aaa"}} = UriTemplate.parse("{aaa")
+      assert {:error, {:invalid_value, "{aaa"}} = UriTemplate.parse("/{bbb}/{aaa")
+    end
+
+    test "invalid_operator" do
+      assert {:error, {:invalid_value, "{$aaa}"}} = UriTemplate.parse("{$aaa}")
     end
   end
 end

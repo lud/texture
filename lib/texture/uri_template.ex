@@ -1,6 +1,70 @@
 defmodule Texture.UriTemplate do
-  @moduledoc """
-  URI Template parser implementation following RFC 6570.
+  @moduledoc ~S"""
+  URI Template parser implementation following RFC 6570 (levels 1–4).
+
+  Parsing returns a `%Texture.UriTemplate{}` struct. Use `render/2` to expand it
+  with variable values provided either as atom or binary keys.
+
+  ## Parsing
+
+      {:ok, template} = Texture.UriTemplate.parse("/users/{id}")
+      %Texture.UriTemplate{}
+
+  An invalid template returns an error tuple:
+
+      iex> Texture.UriTemplate.parse("/x/{not_closed")
+      {:error, {:invalid_value, "{not_closed"}}
+
+  ## Rendering
+
+  Provide a map whose keys are either atoms or binaries. Values are coerced
+  to strings; lists and exploded maps are supported per RFC 6570.
+
+      iex> {:ok, t} = Texture.UriTemplate.parse("https://ex.com{/ver}{/res*}{?q,lang}{&page}")
+      iex> Texture.UriTemplate.render(t, %{ver: "v1", res: ["users", 42], q: "café", lang: :fr, page: 2})
+      "https://ex.com/v1/users/42?q=caf%C3%A9&lang=fr&page=2"
+
+  Reserved expansion keeps reserved characters (e.g. '+'):
+
+      iex> {:ok, t} = Texture.UriTemplate.parse("/files{+path}")
+      iex> Texture.UriTemplate.render(t, %{path: "/a/b c"})
+      "/files/a/b%20c"
+
+  Simple expansion percent-encodes reserved characters:
+
+      iex> {:ok, t} = Texture.UriTemplate.parse("/files/{path}")
+      iex> Texture.UriTemplate.render(t, %{path: "/a/b c"})
+      "/files/%2Fa%2Fb%20c"
+
+  Exploded list path segments:
+
+      iex> {:ok, t} = Texture.UriTemplate.parse("/api{/segments*}")
+      iex> Texture.UriTemplate.render(t, %{segments: ["v1", "users", 42]})
+      "/api/v1/users/42"
+
+  Query continuation & omission of undefined variables:
+
+      iex> {:ok, t} = Texture.UriTemplate.parse("?fixed=1{&x,y}")
+      iex> Texture.UriTemplate.render(t, %{x: 2})
+      "?fixed=1&x=2"
+
+  Fragment expansion with unicode & prefix modifier:
+
+      iex> {:ok, t} = Texture.UriTemplate.parse("{#frag:6}")
+      iex> Texture.UriTemplate.render(t, %{frag: "café-bar"})
+      "#caf%C3%A9-b"
+
+  Empty list omits expression:
+
+      iex> {:ok, t} = Texture.UriTemplate.parse("/s{?list}")
+      iex> Texture.UriTemplate.render(t, %{list: []})
+      "/s"
+
+  ## Notes
+
+  * Undefined variables are silently omitted.
+  * Empty string values may contribute a key without '=' (for certain operators like ';').
+  * Order of exploded map query parameters is not guaranteed (maps are unordered).
   """
   @external_resource "priv/grammars/uri-template.abnf"
 
@@ -21,22 +85,22 @@ defmodule Texture.UriTemplate do
   def parse(data) do
     case uri_template(data) do
       {:ok, parts, "", _, _, _} -> {:ok, %__MODULE__{parts: parts, raw: data}}
-      _ -> {:error, :invalid}
+      {:ok, _, rest, _, _, _} -> {:error, {:invalid_value, rest}}
     end
   end
 
-  @spec generate_uri(t, %{optional(atom) => term, optional(binary) => term}) :: binary
-  def generate_uri(%__MODULE__{parts: parts}, params) do
+  @spec render(t, %{optional(atom) => term, optional(binary) => term}) :: binary
+  def render(%__MODULE__{parts: parts}, params) do
     params =
       Map.new(params, fn
         {key, value} when is_binary(key) -> {key, value}
         {key, value} when is_atom(key) -> {render_key(key), value}
       end)
 
-    IO.iodata_to_binary(do_generate_uri(parts, params))
+    IO.iodata_to_binary(do_render(parts, params))
   end
 
-  defp do_generate_uri(parts, params) do
+  defp do_render(parts, params) do
     Enum.map(parts, fn item -> render_part(item, params) end)
   end
 
