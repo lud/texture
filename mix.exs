@@ -7,7 +7,8 @@ defmodule Texture.MixProject do
       version: "0.1.0",
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      dialyzer: dialyzer()
     ]
   end
 
@@ -29,6 +30,24 @@ defmodule Texture.MixProject do
       # Test
       {:ex_check, "~> 0.16.0", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        dialyzer: :test
+      ]
+    ]
+  end
+
+  defp dialyzer do
+    [
+      flags: [:unmatched_returns, :error_handling, :unknown, :extra_return],
+      list_unused_filters: true,
+      plt_add_deps: :app_tree,
+      plt_add_apps: [:ex_unit, :inets],
+      plt_local_path: "_build/plts"
     ]
   end
 end
