@@ -1,18 +1,356 @@
 defmodule Texture.UriTemplateTest do
   alias Texture.UriTemplate
   use ExUnit.Case, async: true
+
   doctest UriTemplate
 
+  @rfc_sample_data %{
+    "count" => ["one", "two", "three"],
+    "dom" => ["example", "com"],
+    "dub" => "me/too",
+    "hello" => "Hello World!",
+    "half" => "50%",
+    "var" => "value",
+    "who" => "fred",
+    "base" => "http://example.com/home/",
+    "path" => "/foo/bar",
+    "list" => ["red", "green", "blue"],
+    # It works for maps but the order is not preserved, so we can use a keyword
+    # "keys" => %{"semi" => ";", "dot" => ".", "comma" => ","},
+    "keys" => [semi: ";", dot: ".", comma: ","],
+    "v" => "6",
+    "x" => "1024",
+    "y" => "768",
+    "empty" => "",
+    "empty_keys" => %{},
+    # "undef" => ___,
+    "year" => ["1965", "2000", "2012"],
+    "semi" => ";"
+  }
+
+  defp parse_template(source) do
+    assert {:ok, parsed} = UriTemplate.parse(source)
+    {:ok, parsed}
+  end
+
+  defp render(parsed, params) do
+    UriTemplate.render(parsed, params)
+  end
+
+  defp rfc_example(tpl) do
+    {:ok, parsed} = parse_template(tpl)
+    render(parsed, @rfc_sample_data)
+  end
+
+  describe "RFC6570 Examples 3.2.1 Variable Expansion - Basic Lists" do
+    test "list expansion examples" do
+      assert "one,two,three" = rfc_example("{count}")
+      assert "one,two,three" = rfc_example("{count*}")
+      assert "/one,two,three" = rfc_example("{/count}")
+      assert "/one/two/three" = rfc_example("{/count*}")
+      assert ";count=one,two,three" = rfc_example("{;count}")
+      assert ";count=one;count=two;count=three" = rfc_example("{;count*}")
+      assert "?count=one,two,three" = rfc_example("{?count}")
+      assert "?count=one&count=two&count=three" = rfc_example("{?count*}")
+      assert "&count=one&count=two&count=three" = rfc_example("{&count*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.2 Simple String Expansion" do
+    test "simple string expansion" do
+      assert "value" = rfc_example("{var}")
+      assert "Hello%20World%21" = rfc_example("{hello}")
+      assert "50%25" = rfc_example("{half}")
+      assert "OX" = rfc_example("O{empty}X")
+      assert "OX" = rfc_example("O{undef}X")
+      assert "1024,768" = rfc_example("{x,y}")
+      assert "1024,Hello%20World%21,768" = rfc_example("{x,hello,y}")
+      assert "?1024," = rfc_example("?{x,empty}")
+      assert "?1024" = rfc_example("?{x,undef}")
+      assert "?768" = rfc_example("?{undef,y}")
+      assert "val" = rfc_example("{var:3}")
+      assert "value" = rfc_example("{var:30}")
+      assert "red,green,blue" = rfc_example("{list}")
+      assert "red,green,blue" = rfc_example("{list*}")
+      assert "semi,%3B,dot,.,comma,%2C" = rfc_example("{keys}")
+      assert "semi=%3B,dot=.,comma=%2C" = rfc_example("{keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.3 Reserved Expansion" do
+    test "reserved expansion" do
+      assert "value" = rfc_example("{+var}")
+      assert "Hello%20World!" = rfc_example("{+hello}")
+      assert "50%25" = rfc_example("{+half}")
+      assert "http%3A%2F%2Fexample.com%2Fhome%2Findex" = rfc_example("{base}index")
+      assert "http://example.com/home/index" = rfc_example("{+base}index")
+      assert "OX" = rfc_example("O{+empty}X")
+      assert "OX" = rfc_example("O{+undef}X")
+      assert "/foo/bar/here" = rfc_example("{+path}/here")
+      assert "here?ref=/foo/bar" = rfc_example("here?ref={+path}")
+      assert "up/foo/barvalue/here" = rfc_example("up{+path}{var}/here")
+      assert "1024,Hello%20World!,768" = rfc_example("{+x,hello,y}")
+      assert "/foo/bar,1024/here" = rfc_example("{+path,x}/here")
+      assert "/foo/b/here" = rfc_example("{+path:6}/here")
+      assert "red,green,blue" = rfc_example("{+list}")
+      assert "red,green,blue" = rfc_example("{+list*}")
+      assert "semi,;,dot,.,comma,," = rfc_example("{+keys}")
+      assert "semi=;,dot=.,comma=," = rfc_example("{+keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.4 Fragment Expansion" do
+    test "fragment expansion" do
+      assert "#value" = rfc_example("{#var}")
+      assert "#Hello%20World!" = rfc_example("{#hello}")
+      assert "#50%25" = rfc_example("{#half}")
+      assert "foo#" = rfc_example("foo{#empty}")
+      assert "foo" = rfc_example("foo{#undef}")
+      assert "#1024,Hello%20World!,768" = rfc_example("{#x,hello,y}")
+      assert "#/foo/bar,1024/here" = rfc_example("{#path,x}/here")
+      assert "#/foo/b/here" = rfc_example("{#path:6}/here")
+      assert "#red,green,blue" = rfc_example("{#list}")
+      assert "#red,green,blue" = rfc_example("{#list*}")
+      assert "#semi,;,dot,.,comma,," = rfc_example("{#keys}")
+      assert "#semi=;,dot=.,comma=," = rfc_example("{#keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.5 Label Expansion with Dot-Prefix" do
+    test "label expansion" do
+      assert ".fred" = rfc_example("{.who}")
+      assert ".fred.fred" = rfc_example("{.who,who}")
+      assert ".50%25.fred" = rfc_example("{.half,who}")
+      assert "www.example.com" = rfc_example("www{.dom*}")
+      assert "X.value" = rfc_example("X{.var}")
+      assert "X." = rfc_example("X{.empty}")
+      assert "X" = rfc_example("X{.undef}")
+      assert "X.val" = rfc_example("X{.var:3}")
+      assert "X.red,green,blue" = rfc_example("X{.list}")
+      assert "X.red.green.blue" = rfc_example("X{.list*}")
+      assert "X.semi,%3B,dot,.,comma,%2C" = rfc_example("X{.keys}")
+      assert "X.semi=%3B.dot=..comma=%2C" = rfc_example("X{.keys*}")
+      assert "X" = rfc_example("X{.empty_keys}")
+      assert "X" = rfc_example("X{.empty_keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.6 Path Segment Expansion" do
+    test "path segment expansion" do
+      assert "/fred" = rfc_example("{/who}")
+      assert "/fred/fred" = rfc_example("{/who,who}")
+      assert "/50%25/fred" = rfc_example("{/half,who}")
+      assert "/fred/me%2Ftoo" = rfc_example("{/who,dub}")
+      assert "/value" = rfc_example("{/var}")
+      assert "/value/" = rfc_example("{/var,empty}")
+      assert "/value" = rfc_example("{/var,undef}")
+      assert "/value/1024/here" = rfc_example("{/var,x}/here")
+      assert "/v/value" = rfc_example("{/var:1,var}")
+      assert "/red,green,blue" = rfc_example("{/list}")
+      assert "/red/green/blue" = rfc_example("{/list*}")
+      assert "/red/green/blue/%2Ffoo" = rfc_example("{/list*,path:4}")
+      assert "/semi,%3B,dot,.,comma,%2C" = rfc_example("{/keys}")
+      assert "/semi=%3B/dot=./comma=%2C" = rfc_example("{/keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.7 Path-Style Parameter Expansion" do
+    test "path-style parameter expansion" do
+      assert ";who=fred" = rfc_example("{;who}")
+      assert ";half=50%25" = rfc_example("{;half}")
+      assert ";empty" = rfc_example("{;empty}")
+      assert ";v=6;empty;who=fred" = rfc_example("{;v,empty,who}")
+      assert ";v=6;who=fred" = rfc_example("{;v,bar,who}")
+      assert ";x=1024;y=768" = rfc_example("{;x,y}")
+      assert ";x=1024;y=768;empty" = rfc_example("{;x,y,empty}")
+      assert ";x=1024;y=768" = rfc_example("{;x,y,undef}")
+      assert ";hello=Hello" = rfc_example("{;hello:5}")
+      assert ";list=red,green,blue" = rfc_example("{;list}")
+      assert ";list=red;list=green;list=blue" = rfc_example("{;list*}")
+      assert ";keys=semi,%3B,dot,.,comma,%2C" = rfc_example("{;keys}")
+      assert ";semi=%3B;dot=.;comma=%2C" = rfc_example("{;keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.8 Form-Style Query Expansion" do
+    test "form-style query expansion" do
+      assert "?who=fred" = rfc_example("{?who}")
+      assert "?half=50%25" = rfc_example("{?half}")
+      assert "?x=1024&y=768" = rfc_example("{?x,y}")
+      assert "?x=1024&y=768&empty=" = rfc_example("{?x,y,empty}")
+      assert "?x=1024&y=768" = rfc_example("{?x,y,undef}")
+      assert "?var=val" = rfc_example("{?var:3}")
+      assert "?list=red,green,blue" = rfc_example("{?list}")
+      assert "?list=red&list=green&list=blue" = rfc_example("{?list*}")
+      assert "?keys=semi,%3B,dot,.,comma,%2C" = rfc_example("{?keys}")
+      assert "?semi=%3B&dot=.&comma=%2C" = rfc_example("{?keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 3.2.9 Form-Style Query Continuation" do
+    test "form-style query continuation" do
+      assert "&who=fred" = rfc_example("{&who}")
+      assert "&half=50%25" = rfc_example("{&half}")
+      assert "?fixed=yes&x=1024" = rfc_example("?fixed=yes{&x}")
+      assert "&x=1024&y=768&empty=" = rfc_example("{&x,y,empty}")
+      assert "&x=1024&y=768" = rfc_example("{&x,y,undef}")
+      assert "&var=val" = rfc_example("{&var:3}")
+      assert "&list=red,green,blue" = rfc_example("{&list}")
+      assert "&list=red&list=green&list=blue" = rfc_example("{&list*}")
+      assert "&keys=semi,%3B,dot,.,comma,%2C" = rfc_example("{&keys}")
+      assert "&semi=%3B&dot=.&comma=%2C" = rfc_example("{&keys*}")
+    end
+  end
+
+  describe "RFC6570 Examples 2.4.1 Prefix Values" do
+    test "prefix modifier examples" do
+      assert "value" = rfc_example("{var}")
+      assert "value" = rfc_example("{var:20}")
+      assert "val" = rfc_example("{var:3}")
+      assert "%3B" = rfc_example("{semi}")
+      assert "%3B" = rfc_example("{semi:2}")
+    end
+  end
+
+  describe "RFC6570 Examples 2.4.2 Composite Values - Explode" do
+    test "explode modifier examples" do
+      assert "find?year=1965&year=2000&year=2012" = rfc_example("find{?year*}")
+      assert "www.example.com" = rfc_example("www{.dom*}")
+    end
+  end
+
+  describe "RFC6570 Examples Level 1 Examples" do
+    test "simple string expansion" do
+      assert "value" = rfc_example("{var}")
+      assert "Hello%20World%21" = rfc_example("{hello}")
+    end
+  end
+
+  describe "RFC6570 Examples Level 2 Examples" do
+    test "reserved string expansion" do
+      assert "value" = rfc_example("{+var}")
+      assert "Hello%20World!" = rfc_example("{+hello}")
+      assert "/foo/bar/here" = rfc_example("{+path}/here")
+      assert "here?ref=/foo/bar" = rfc_example("here?ref={+path}")
+    end
+
+    test "fragment expansion" do
+      assert "X#value" = rfc_example("X{#var}")
+      assert "X#Hello%20World!" = rfc_example("X{#hello}")
+    end
+  end
+
+  describe "RFC6570 Examples Level 3 Examples" do
+    test "string expansion with multiple variables" do
+      assert "map?1024,768" = rfc_example("map?{x,y}")
+      assert "1024,Hello%20World%21,768" = rfc_example("{x,hello,y}")
+    end
+
+    test "reserved expansion with multiple variables" do
+      assert "1024,Hello%20World!,768" = rfc_example("{+x,hello,y}")
+      assert "/foo/bar,1024/here" = rfc_example("{+path,x}/here")
+    end
+
+    test "fragment expansion with multiple variables" do
+      assert "#1024,Hello%20World!,768" = rfc_example("{#x,hello,y}")
+      assert "#/foo/bar,1024/here" = rfc_example("{#path,x}/here")
+    end
+
+    test "label expansion" do
+      assert "X.value" = rfc_example("X{.var}")
+      assert "X.1024.768" = rfc_example("X{.x,y}")
+    end
+
+    test "path segments" do
+      assert "/value" = rfc_example("{/var}")
+      assert "/value/1024/here" = rfc_example("{/var,x}/here")
+    end
+
+    test "path-style parameters" do
+      assert ";x=1024;y=768" = rfc_example("{;x,y}")
+      assert ";x=1024;y=768;empty" = rfc_example("{;x,y,empty}")
+    end
+
+    test "form-style query" do
+      assert "?x=1024&y=768" = rfc_example("{?x,y}")
+      assert "?x=1024&y=768&empty=" = rfc_example("{?x,y,empty}")
+    end
+
+    test "form-style query continuation" do
+      assert "?fixed=yes&x=1024" = rfc_example("?fixed=yes{&x}")
+      assert "&x=1024&y=768&empty=" = rfc_example("{&x,y,empty}")
+    end
+  end
+
+  describe "RFC6570 Examples Level 4 Examples" do
+    test "string expansion with value modifiers" do
+      assert "val" = rfc_example("{var:3}")
+      assert "value" = rfc_example("{var:30}")
+      assert "red,green,blue" = rfc_example("{list}")
+      assert "red,green,blue" = rfc_example("{list*}")
+      assert "semi,%3B,dot,.,comma,%2C" = rfc_example("{keys}")
+      assert "semi=%3B,dot=.,comma=%2C" = rfc_example("{keys*}")
+    end
+
+    test "reserved expansion with value modifiers" do
+      assert "/foo/b/here" = rfc_example("{+path:6}/here")
+      assert "red,green,blue" = rfc_example("{+list}")
+      assert "red,green,blue" = rfc_example("{+list*}")
+      assert "semi,;,dot,.,comma,," = rfc_example("{+keys}")
+      assert "semi=;,dot=.,comma=," = rfc_example("{+keys*}")
+    end
+
+    test "fragment expansion with value modifiers" do
+      assert "#/foo/b/here" = rfc_example("{#path:6}/here")
+      assert "#red,green,blue" = rfc_example("{#list}")
+      assert "#red,green,blue" = rfc_example("{#list*}")
+      assert "#semi,;,dot,.,comma,," = rfc_example("{#keys}")
+      assert "#semi=;,dot=.,comma=," = rfc_example("{#keys*}")
+    end
+
+    test "label expansion with value modifiers" do
+      assert "X.val" = rfc_example("X{.var:3}")
+      assert "X.red,green,blue" = rfc_example("X{.list}")
+      assert "X.red.green.blue" = rfc_example("X{.list*}")
+      assert "X.semi,%3B,dot,.,comma,%2C" = rfc_example("X{.keys}")
+      assert "X.semi=%3B.dot=..comma=%2C" = rfc_example("X{.keys*}")
+    end
+
+    test "path segments with value modifiers" do
+      assert "/v/value" = rfc_example("{/var:1,var}")
+      assert "/red,green,blue" = rfc_example("{/list}")
+      assert "/red/green/blue" = rfc_example("{/list*}")
+      assert "/red/green/blue/%2Ffoo" = rfc_example("{/list*,path:4}")
+      assert "/semi,%3B,dot,.,comma,%2C" = rfc_example("{/keys}")
+      assert "/semi=%3B/dot=./comma=%2C" = rfc_example("{/keys*}")
+    end
+
+    test "path-style parameters with value modifiers" do
+      assert ";hello=Hello" = rfc_example("{;hello:5}")
+      assert ";list=red,green,blue" = rfc_example("{;list}")
+      assert ";list=red;list=green;list=blue" = rfc_example("{;list*}")
+      assert ";keys=semi,%3B,dot,.,comma,%2C" = rfc_example("{;keys}")
+      assert ";semi=%3B;dot=.;comma=%2C" = rfc_example("{;keys*}")
+    end
+
+    test "form-style query with value modifiers" do
+      assert "?var=val" = rfc_example("{?var:3}")
+      assert "?list=red,green,blue" = rfc_example("{?list}")
+      assert "?list=red&list=green&list=blue" = rfc_example("{?list*}")
+      assert "?keys=semi,%3B,dot,.,comma,%2C" = rfc_example("{?keys}")
+      assert "?semi=%3B&dot=.&comma=%2C" = rfc_example("{?keys*}")
+    end
+
+    test "form-style query continuation with value modifiers" do
+      assert "&var=val" = rfc_example("{&var:3}")
+      assert "&list=red,green,blue" = rfc_example("{&list}")
+      assert "&list=red&list=green&list=blue" = rfc_example("{&list*}")
+      assert "&keys=semi,%3B,dot,.,comma,%2C" = rfc_example("{&keys}")
+      assert "&semi=%3B&dot=.&comma=%2C" = rfc_example("{&keys*}")
+    end
+  end
+
   describe "parsing to templates" do
-    defp parse_template(source) do
-      assert {:ok, parsed} = UriTemplate.parse(source)
-      {:ok, parsed}
-    end
-
-    defp render(parsed, params) do
-      UriTemplate.render(parsed, params)
-    end
-
     test "simple variable expansion in path" do
       template = "/users/{id}"
 
@@ -20,6 +358,21 @@ defmodule Texture.UriTemplateTest do
 
       assert "/users/42" = render(parsed, %{"id" => "42"})
       assert "/users/42" = render(parsed, %{id: "42"})
+    end
+
+    test "unicode characters" do
+      assert {:ok, parsed} = parse_template("/héé{/x,y}")
+      assert "/héé/1/2" = render(parsed, %{x: 1, y: 2})
+    end
+
+    test "iprivate characters" do
+      assert {:ok, parsed} = parse_template("/h\u{10FFFD}\u{10FFFD}{/x,y}")
+      assert "/h\u{10FFFD}\u{10FFFD}/1/2" = render(parsed, %{x: 1, y: 2})
+    end
+
+    test "percent encoded characters" do
+      assert {:ok, parsed} = parse_template("/h%20%20{/x,y}")
+      assert "/h%20%20/1/2" = render(parsed, %{x: 1, y: 2})
     end
 
     test "reserved expansion keeps reserved characters" do
@@ -101,6 +454,15 @@ defmodule Texture.UriTemplateTest do
 
       assert "/files/a/b/c" = render(parsed, %{"path" => "/a/b/c"})
       assert "/files/a/b/c" = render(parsed, %{path: "/a/b/c"})
+    end
+
+    test "no-operator variable list" do
+      template = "/users/{id,name}"
+
+      assert {:ok, parsed} = parse_template(template)
+
+      assert "/users/42,alice" = render(parsed, %{"id" => "42", "name" => "alice"})
+      assert "/users/42,alice" = render(parsed, %{id: "42", name: "alice"})
     end
 
     test "semicolon path-style parameter" do
@@ -292,15 +654,6 @@ defmodule Texture.UriTemplateTest do
 
       assert "/t/0/false" = render(parsed, %{"num" => 0, "bool" => false})
       assert "/t/0/false" = render(parsed, %{num: 0, bool: false})
-    end
-
-    test "empty list omits query expression (non-exploded)" do
-      template = "/s{?list}"
-
-      assert {:ok, parsed} = parse_template(template)
-
-      assert "/s" = render(parsed, %{"list" => []})
-      assert "/s" = render(parsed, %{list: []})
     end
 
     test "empty list omits query expression (exploded)" do
