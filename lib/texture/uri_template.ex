@@ -134,11 +134,15 @@ defmodule Texture.UriTemplate do
   @doc """
   Renders a template given its internal representation and a map of parameters.
 
-  Rendering has partial support for list of tuples. Such lists will be rendered
-  as maps, but empty lists are still condireded undefined values.
+  This implementations made opinionated choices in regard to the RFC 6570
+  specification:
 
-  Also note that literal parts of the template (everything that is not in `{`
-  `}` will be returned as-is, whereas it should be percent-encoded.
+  * Rendering has partial support for list of tuples. Such lists will be
+    rendered as maps, but empty lists are still condireded undefined values.
+  * Also note that literal parts of the template (everything that is not in `{`
+    `}` will be returned as-is, whereas it should be percent-encoded.
+  * Using explode (as in `{var*}`) with a scalar value will wrap the value in a
+    list. Tuples are not supported.
   """
   @spec render(t, %{optional(atom) => term, optional(binary) => term}) :: binary
   def render(%__MODULE__{parts: parts}, params) do
@@ -231,11 +235,11 @@ defmodule Texture.UriTemplate do
   defp fetch_param(params, key) do
     # https://www.rfc-editor.org/rfc/rfc6570.html#section-2.3
     #
-    # * A variable defined as a list value is considered undefined if the list
-    #   contains zero members.
-    # * A variable defined as an associative array of (name, value) pairs is
-    #   considered undefined if the array contains zero members or if all member
-    #   names in the array are associated with undefined values.
+    # > A variable defined as a list value is considered undefined if the list
+    # > contains zero members.  A variable defined as an associative array of
+    # > (name, value) pairs is considered undefined if the array contains zero
+    # > members or if all member names in the array are associated with
+    # > undefined values.
     case Map.fetch(params, key) do
       {:ok, list} when is_list(list) ->
         check_undef_compound(list)
@@ -301,6 +305,27 @@ defmodule Texture.UriTemplate do
 
   defp explode_value(map, _, _default_key) when is_map(map) do
     Map.to_list(map)
+  end
+
+  # https://www.rfc-editor.org/rfc/rfc6570.html#section-2.4.2
+  #
+  #  > An explode ("*") modifier indicates that the variable is to be treated as
+  #  > a composite value consisting of either a list of values or an associative
+  #  > array of (name, value) pairs.  Hence, the expansion process is applied to
+  #  > each member of the composite as if it were listed as a separate variable.
+  #  > This kind of variable specification is significantly less
+  #  > self-documenting than non-exploded variables, since there is less
+  #  > correspondence between the variable name and how the URI reference
+  #  > appears after expansion.
+  #
+  # So we chose to return a list with a single value
+
+  defp explode_value(other, :dicts, _default_key) do
+    [other]
+  end
+
+  defp explode_value(other, _, default_key) do
+    [{default_key, other}]
   end
 
   defp render_pairs(list, escape, dict_mode) when is_list(list) do

@@ -706,6 +706,11 @@ defmodule Texture.UriTemplateTest do
       result2 = render(parsed, %{map: %{"a" => 1, :b => 2}})
       assert result2 in ["https://ex.com?a=1&b=2", "https://ex.com?b=2&a=1"]
     end
+
+    test "exploding scalar values" do
+      assert {:ok, parsed} = parse_template("/{int*}/{str*}{/null*}{?int*}{&str*}{&null*}")
+      assert "/1/hello?int=1&str=hello" = render(parsed, %{int: 1, str: "hello", null: nil})
+    end
   end
 
   describe "parsing invalid values" do
