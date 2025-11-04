@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2025-11-04
+
+### 🚜 Refactor
+
+- Rewrote the UriTemplate rendered
+
+### 📚 Documentation
+
+- Fix doc examples
+
 ## [0.1.0] - 2025-09-15
 
 ### 🚀 Features
