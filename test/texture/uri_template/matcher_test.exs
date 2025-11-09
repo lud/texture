@@ -501,6 +501,48 @@ defmodule Texture.UriTemplate.MatcherTest do
     end
   end
 
+  describe "unsupported features - prefix modifiers" do
+    test "prefix modifier with default operator raises error" do
+      template = "{var:3}"
+
+      assert_raise TemplateMatchError, ~r/prefix modifier.*not supported/i, fn ->
+        match_template!(template, "abc")
+      end
+    end
+
+    test "prefix modifier with path segment operator raises error" do
+      template = "{/path:5}"
+
+      assert_raise TemplateMatchError, ~r/prefix modifier.*not supported/i, fn ->
+        match_template!(template, "/value")
+      end
+    end
+
+    test "prefix modifier with query operator raises error" do
+      template = "{?foo:10}"
+
+      assert_raise TemplateMatchError, ~r/prefix modifier.*not supported/i, fn ->
+        match_template!(template, "?foo=value")
+      end
+    end
+
+    test "prefix modifier with multiple params raises error" do
+      template = "{/foo:3,bar}"
+
+      assert_raise TemplateMatchError, ~r/prefix modifier.*not supported/i, fn ->
+        match_template!(template, "/value1/value2")
+      end
+    end
+
+    test "prefix modifier in complex template raises error" do
+      template = "http://example.com/api{/version:2}/{resource}{?q:20}"
+
+      assert_raise TemplateMatchError, ~r/prefix modifier.*not supported/i, fn ->
+        match_template!(template, "http://example.com/api/v1/users?q=search")
+      end
+    end
+  end
+
   describe "path segment parameters with /" do
     test "single path segment parameter" do
       template = "{/foo}"

@@ -121,6 +121,15 @@ defmodule Texture.UriTemplate.Matcher do
   end
 
   defp extract_expr({:expr, op, varlist}, url_part) do
+    Enum.each(varlist, fn
+      {:var, name, {:prefix, _}} ->
+        raise TemplateMatchError,
+              "prefix modifier is not supported for matching (variable: #{name})"
+
+      _ ->
+        :ok
+    end)
+
     {prefix, param_sep, list_sep} =
       case op do
         :default -> {nil, ?,, nil}

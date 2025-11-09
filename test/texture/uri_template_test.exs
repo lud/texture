@@ -2,7 +2,7 @@ defmodule Texture.UriTemplateTest do
   alias Texture.UriTemplate
   use ExUnit.Case, async: true
 
-  doctest UriTemplate
+  doctest UriTemplate, except: [match!: 2]
 
   @rfc_sample_data %{
     "count" => ["one", "two", "three"],

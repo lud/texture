@@ -167,17 +167,208 @@ defmodule Texture.UriTemplate do
   end
 
   @doc """
-  Renders a template given its internal representation and a map of parameters.
+  Expands a URI template with provided variable values.
 
-  This implementations made opinionated choices in regard to the RFC 6570
-  specification:
+  Returns a rendered URI string by expanding all template expressions with the
+  given parameters. Variables are looked up by name (as atoms or binaries) and
+  values are automatically coerced to strings. Follows RFC 6570 levels 1–4.
 
-  * Rendering has partial support for list of tuples. Such lists will be
-    rendered as maps, but empty lists are still condireded undefined values.
-  * Also note that literal parts of the template (everything that is not in `{`
-    `}` will be returned as-is, whereas it should be percent-encoded.
-  * Using explode (as in `{var*}`) with a scalar value will wrap the value in a
-    list. Tuples are not supported.
+  ## Supported Operators
+
+  All RFC 6570 operators are supported:
+
+  * **Default** (no operator): `{var}` – Simple string expansion with
+    percent-encoding
+  * **Reserved** (`+`): `{+var}` – Reserved expansion, keeps `/`, `?`, `&`, etc.
+  * **Fragment** (`#`): `{#var}` – Fragment identifier expansion
+  * **Label** (`.`): `{.var}` – Dot-prefixed label expansion
+  * **Path segment** (`/`): `{/var}` – Path segment expansion
+  * **Path-style parameter** (`;`): `{;var}` – Semicolon-prefixed parameters
+  * **Query** (`?`): `{?var}` – Form-style query parameters
+  * **Query continuation** (`&`): `{&var}` – Query continuation
+
+  ## Basic Examples
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/users/{id}")
+      iex> Texture.UriTemplate.render(t, %{id: "42"})
+      "http://example.com/users/42"
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/users/{id}")
+      iex> Texture.UriTemplate.render(t, %{"id" => "42"})
+      "http://example.com/users/42"
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com{?q,lang}")
+      iex> Texture.UriTemplate.render(t, %{q: "café", lang: "fr"})
+      "http://example.com?q=caf%C3%A9&lang=fr"
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/api{/version,resource}")
+      iex> Texture.UriTemplate.render(t, %{version: "v1", resource: "users"})
+      "http://example.com/api/v1/users"
+
+  ## Reserved vs Simple Expansion
+
+  Simple expansion percent-encodes reserved characters:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/files/{path}")
+      iex> Texture.UriTemplate.render(t, %{path: "/a/b c"})
+      "http://example.com/files/%2Fa%2Fb%20c"
+
+  Reserved expansion (`+`) keeps reserved characters like `/`:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/files{+path}")
+      iex> Texture.UriTemplate.render(t, %{path: "/a/b c"})
+      "http://example.com/files/a/b%20c"
+
+  ## List Expansion
+
+  Lists are expanded differently based on the operator and explode modifier:
+
+      # Simple expansion (comma-separated)
+      iex> t = Texture.UriTemplate.parse!("http://example.com/{segments}")
+      iex> Texture.UriTemplate.render(t, %{segments: ["v1", "users", "42"]})
+      "http://example.com/v1,users,42"
+
+      # Path segment expansion with explode
+      iex> t = Texture.UriTemplate.parse!("http://example.com/api{/segments*}")
+      iex> Texture.UriTemplate.render(t, %{segments: ["v1", "users", "42"]})
+      "http://example.com/api/v1/users/42"
+
+      # Query parameters with explode
+      iex> t = Texture.UriTemplate.parse!("http://example.com{?list*}")
+      iex> Texture.UriTemplate.render(t, %{list: ["red", "green"]})
+      "http://example.com?list=red&list=green"
+
+      # Query parameters without explode (comma-separated)
+      iex> t = Texture.UriTemplate.parse!("http://example.com{?list}")
+      iex> Texture.UriTemplate.render(t, %{list: ["red", "green"]})
+      "http://example.com?list=red,green"
+
+  ## Map Expansion
+
+  Maps and keyword lists can be expanded with the explode modifier:
+
+      # Query with exploded map
+      iex> t = Texture.UriTemplate.parse!("http://example.com{?map*}")
+      iex> Texture.UriTemplate.render(t, %{map: %{a: "1", b: "2"}})
+      "http://example.com?a=1&b=2"
+
+      # Semicolon parameters with exploded keyword list
+      iex> t = Texture.UriTemplate.parse!("http://example.com{;params*}")
+      iex> Texture.UriTemplate.render(t, %{params: [x: "1", y: "2"]})
+      "http://example.com;x=1;y=2"
+
+      # Non-exploded map (comma-separated key,value pairs)
+      iex> t = Texture.UriTemplate.parse!("http://example.com/{map}")
+      iex> Texture.UriTemplate.render(t, %{map: %{a: "1", b: "2"}})
+      "http://example.com/a,1,b,2"
+
+  ## Prefix Modifier
+
+  The prefix modifier (`:n`) truncates values to a maximum length:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/p/{var:3}")
+      iex> Texture.UriTemplate.render(t, %{var: "abcdef"})
+      "http://example.com/p/abc"
+
+      # Works with reserved expansion
+      iex> t = Texture.UriTemplate.parse!("http://example.com{+path:5}")
+      iex> Texture.UriTemplate.render(t, %{path: "/a/b/c"})
+      "http://example.com/a/b/"
+
+      # Works with fragment expansion
+      iex> t = Texture.UriTemplate.parse!("http://example.com{#frag:6}")
+      iex> Texture.UriTemplate.render(t, %{frag: "café-bar"})
+      "http://example.com#caf%C3%A9-b"
+
+  ## Undefined Variables
+
+  Undefined variables are silently omitted from the output:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com{/ver}{?q,lang}")
+      iex> Texture.UriTemplate.render(t, %{q: "search"})
+      "http://example.com?q=search"
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/users{/id}")
+      iex> Texture.UriTemplate.render(t, %{})
+      "http://example.com/users"
+
+  ## Empty Values
+
+  Empty strings contribute differently based on the operator:
+
+      # Simple expansion: empty string outputs nothing
+      iex> t = Texture.UriTemplate.parse!("http://example.com/a{empty}b")
+      iex> Texture.UriTemplate.render(t, %{empty: ""})
+      "http://example.com/ab"
+
+      # Query parameter: key with equals sign
+      iex> t = Texture.UriTemplate.parse!("http://example.com{?x}")
+      iex> Texture.UriTemplate.render(t, %{x: ""})
+      "http://example.com?x="
+
+      # Semicolon parameter: key without equals sign
+      iex> t = Texture.UriTemplate.parse!("http://example.com{;id}")
+      iex> Texture.UriTemplate.render(t, %{id: ""})
+      "http://example.com;id"
+
+  Empty lists and maps omit the entire expression:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/s{?list*}")
+      iex> Texture.UriTemplate.render(t, %{list: []})
+      "http://example.com/s"
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/p{;map*}")
+      iex> Texture.UriTemplate.render(t, %{map: %{}})
+      "http://example.com/p"
+
+  ## Unicode and Encoding
+
+  Unicode characters are properly percent-encoded:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/q/{term}")
+      iex> Texture.UriTemplate.render(t, %{term: "café"})
+      "http://example.com/q/caf%C3%A9"
+
+      # Even in reserved expansion (non-ASCII must be encoded per RFC 6570)
+      iex> t = Texture.UriTemplate.parse!("http://example.com/u/{+term}")
+      iex> Texture.UriTemplate.render(t, %{term: "東京/渋谷"})
+      "http://example.com/u/%E6%9D%B1%E4%BA%AC/%E6%B8%8B%E8%B0%B7"
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com{?emoji}")
+      iex> Texture.UriTemplate.render(t, %{emoji: "🙂"})
+      "http://example.com?emoji=%F0%9F%99%82"
+
+  ## Value Coercion
+
+  Non-string values are automatically coerced to strings:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/t/{num}/{bool}")
+      iex> Texture.UriTemplate.render(t, %{num: 0, bool: false})
+      "http://example.com/t/0/false"
+
+  ## Complex Examples
+
+      # Mixed expressions with multiple operators
+      iex> t = Texture.UriTemplate.parse!("http://example.com{/ver}{/res*}{?q,lang}{&page}")
+      iex> Texture.UriTemplate.render(t, %{ver: "v1", res: ["users", 42], q: "café", lang: "fr", page: 2})
+      "http://example.com/v1/users/42?q=caf%C3%A9&lang=fr&page=2"
+
+      # Query continuation with partial matches
+      iex> t = Texture.UriTemplate.parse!("http://example.com?fixed=1{&x,y}")
+      iex> Texture.UriTemplate.render(t, %{x: 2})
+      "http://example.com?fixed=1&x=2"
+
+  ## Implementation Notes
+
+  * Parameter keys can be atoms or binaries – both `%{id: "42"}` and `%{"id" =>
+    "42"}` work
+  * Literal parts of templates (outside `{` `}`) are returned as-is, not
+    percent-encoded
+  * Map key order is not guaranteed in exploded expansions
+  * Empty lists are treated as undefined values and omit the expression
+  * Exploding scalar values (e.g., `{var*}`) wraps them in a list
+  * Lists of tuples (including keyword lists) are rendered as maps when exploded
+  * Tuples as standalone values are not supported
   """
   @spec render(t, %{optional(atom) => term, optional(binary) => term}) :: binary
   def render(%__MODULE__{} = t, params) do
@@ -216,6 +407,11 @@ defmodule Texture.UriTemplate do
 
   Other operators like `+`, `#`, `.`, `;`, `&` are **not supported** for
   matching.
+
+  ## Unsupported Features
+
+  * **Prefix modifier** (`:n`): Templates with prefix modifiers like `{var:3}`
+    are not supported for matching and will raise an error
 
   ## Basic Examples
 
