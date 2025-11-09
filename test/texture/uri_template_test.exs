@@ -688,11 +688,9 @@ defmodule Texture.UriTemplateTest do
 
       assert {:ok, parsed} = parse_template(template)
 
-      result = render(parsed, %{"map" => %{"a" => "1", "b" => "2"}})
-      assert result in ["/m?a=1&b=2", "/m?b=2&a=1"]
+      assert "/m?a=1&b=2" = render(parsed, %{"map" => %{"a" => "1", "b" => "2"}})
 
-      result2 = render(parsed, %{map: %{"a" => "1", "b" => "2"}})
-      assert result2 in ["/m?a=1&b=2", "/m?b=2&a=1"]
+      assert "/m?a=1&b=2" = render(parsed, %{map: %{"a" => "1", "b" => "2"}})
     end
 
     test "exploded map with mixed atom and binary keys" do
@@ -721,6 +719,31 @@ defmodule Texture.UriTemplateTest do
 
     test "invalid_operator" do
       assert {:error, {:invalid_value, "{$aaa}"}} = UriTemplate.parse("{$aaa}")
+    end
+  end
+
+  describe "support for map and keywords" do
+    test "default" do
+      assert {:ok, parsed} = parse_template("{foo*}")
+      assert "a=1,b=2" = render(parsed, %{"foo" => [{"a", "1"}, {"b", "2"}]})
+      assert "a=1,b=2" = render(parsed, %{"foo" => [a: 1, b: 2]})
+      assert "a=1,b=2" = render(parsed, %{"foo" => %{"a" => 1, "b" => 2}})
+      assert "a=1,b=2" = render(parsed, %{"foo" => %{a: 1, b: 2}})
+      assert "a=1,b=2" = render(parsed, %{foo: [{"a", "1"}, {"b", "2"}]})
+      assert "a=1,b=2" = render(parsed, %{foo: [a: 1, b: 2]})
+      assert "a=1,b=2" = render(parsed, %{foo: %{"a" => 1, "b" => 2}})
+      assert "a=1,b=2" = render(parsed, %{foo: %{a: 1, b: 2}})
+
+      # non exploded
+      assert {:ok, parsed} = parse_template("{foo}")
+      assert "a,1,b,2" = render(parsed, %{"foo" => [{"a", "1"}, {"b", "2"}]})
+      assert "a,1,b,2" = render(parsed, %{"foo" => [a: 1, b: 2]})
+      assert "a,1,b,2" = render(parsed, %{"foo" => %{"a" => 1, "b" => 2}})
+      assert "a,1,b,2" = render(parsed, %{"foo" => %{a: 1, b: 2}})
+      assert "a,1,b,2" = render(parsed, %{foo: [{"a", "1"}, {"b", "2"}]})
+      assert "a,1,b,2" = render(parsed, %{foo: [a: 1, b: 2]})
+      assert "a,1,b,2" = render(parsed, %{foo: %{"a" => 1, "b" => 2}})
+      assert "a,1,b,2" = render(parsed, %{foo: %{a: 1, b: 2}})
     end
   end
 end
