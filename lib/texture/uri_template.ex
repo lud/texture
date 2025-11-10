@@ -567,6 +567,7 @@ defmodule Texture.UriTemplate do
   end
 
   defimpl Inspect do
+    @spec inspect(term, term) :: binary
     def inspect(t, _) do
       "Texture.UriTemplate.parse!(#{inspect(t.raw)})"
     end
