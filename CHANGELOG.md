@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2025-11-10
+
+### 🚀 Features
+
+- Implement Inspect for UriTemplate
+
 ## [0.3.0] - 2025-11-09
 
 ### 🚀 Features
