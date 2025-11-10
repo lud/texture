@@ -565,4 +565,10 @@ defmodule Texture.UriTemplate do
   def match!(%__MODULE__{} = t, url) do
     Matcher.match!(t, url)
   end
+
+  defimpl Inspect do
+    def inspect(t, _) do
+      "Texture.UriTemplate.parse!(#{inspect(t.raw)})"
+    end
+  end
 end
