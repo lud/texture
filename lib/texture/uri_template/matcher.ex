@@ -25,7 +25,7 @@ defmodule Texture.UriTemplate.Matcher do
     end
   rescue
     e in TemplateMatchError ->
-      reraise %TemplateMatchError{message: e.message <> "(url = #{inspect(url)})", url: url}, __STACKTRACE__
+      reraise %TemplateMatchError{message: e.message <> " in URI #{url}", url: url}, __STACKTRACE__
   end
 
   defp append_eos([{:expr, _, _} = last]) do
