@@ -879,4 +879,94 @@ defmodule Texture.UriTemplate.MatcherTest do
       assert %{"foo" => "value"} == match_template!(template, url)
     end
   end
+
+  describe "error cases - TemplateMatchError" do
+    test "invalid match before - leftover string after extraction" do
+      # This test triggers the "invalid match before" error when an expression's
+      # extraction doesn't consume all of its allocated URL part.
+      # With query params, if there's junk after the valid param content
+      assert_raise TemplateMatchError, ~r{invalid match before}, fn ->
+        # The query parameter will stop at # but there's stuff after
+        match_template!("{?foo}end", "?foo=bar#extraend")
+      end
+    end
+
+    test "expected prefix - missing required prefix character" do
+      # Path segment requires leading slash, error when it's missing
+      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+        match_template!("{/foo}", "value")
+      end
+
+      # Query segment requires leading question mark, error when it's missing
+      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+        match_template!("{?foo}", "foo=value")
+      end
+    end
+
+    test "invalid parameter syntax - multiple equals signs" do
+      # Query parameter with double equals in value is not supported
+      assert_raise TemplateMatchError, ~r{invalid parameter syntax}, fn ->
+        match_template!("{?foo}", "?foo==bar")
+      end
+
+      # Regular parameter with invalid syntax - too many equals
+      assert_raise TemplateMatchError, ~r{invalid parameter syntax}, fn ->
+        match_template!("{foo}", "a=b=c")
+      end
+    end
+
+    test "unexpected dictionary values - dict in non-exploded position" do
+      # When a non-exploded parameter in default operator receives key=value pairs,
+      # the last parameter will try to accumulate them but fails if not exploded
+      assert_raise TemplateMatchError, ~r{unexpected dictionary values}, fn ->
+        match_template!("{foo,bar}", "simple,a=1,b=2")
+      end
+    end
+
+    test "extra values were not matched - no parameters for extra values" do
+      # Path operator with more values than template parameters
+      assert_raise TemplateMatchError, ~r{extra values}, fn ->
+        match_template!("{/foo}", "/value1/value2")
+      end
+
+      # Path operator non-exploded param with dict values it cannot consume
+      assert_raise TemplateMatchError, ~r{extra values}, fn ->
+        match_template!("{/foo,bar}", "/a=1/b=2/c=3")
+      end
+    end
+
+    test "expected only key/values or naked keys - invalid value type in query" do
+      # Query parameter with mixed list and non-list notation
+      assert_raise TemplateMatchError, ~r{expected only key/values or naked keys}, fn ->
+        match_template!("{?foo}", "?foo,bar")
+      end
+    end
+
+    test "prefix modifier not supported" do
+      # Prefix modifiers are not allowed during matching
+      assert_raise TemplateMatchError, ~r{prefix modifier.*not supported}, fn ->
+        match_template!("{var:3}", "value")
+      end
+
+      assert_raise TemplateMatchError, ~r{prefix modifier.*not supported}, fn ->
+        match_template!("{/path:5}", "/value")
+      end
+
+      assert_raise TemplateMatchError, ~r{prefix modifier.*not supported}, fn ->
+        match_template!("{?query:10}", "?query=value")
+      end
+    end
+
+    test "complex error scenarios" do
+      # Path template expects slash prefix but doesn't get it
+      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+        match_template!("{/resource}", "resource")
+      end
+
+      # Ensures prefix matching is strict
+      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+        match_template!("{?search}", "search=term")
+      end
+    end
+  end
 end

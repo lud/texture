@@ -89,14 +89,23 @@ defmodule Texture.UriTemplate.Matcher do
     end
   end
 
-  defp buf_delete(url, to_delete)
-
-  defp buf_delete(<<prefix, a::binary>>, <<prefix, b::binary>>) do
-    buf_delete(a, b)
+  defp buf_delete(url, to_delete) do
+    case do_buf_delete(url, to_delete) do
+      {:ok, rest} -> rest
+      :error -> raise TemplateMatchError, "could not find literal #{inspect(to_delete)}"
+    end
   end
 
-  defp buf_delete(url, <<>>) do
-    url
+  defp do_buf_delete(<<prefix, a::binary>>, <<prefix, b::binary>>) do
+    do_buf_delete(a, b)
+  end
+
+  defp do_buf_delete(_, <<_, _::binary>>) do
+    :error
+  end
+
+  defp do_buf_delete(uri, <<>>) do
+    {:ok, uri}
   end
 
   defp seek_next_lit_part(parts, acc \\ [])
