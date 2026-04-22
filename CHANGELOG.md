@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-04-22
+
+### ⚙️ Miscellaneous Tasks
+
+- Releasing under the Apache license version 2.0
+
 ## [0.3.2] - 2025-11-15
 
 ### 🐛 Bug Fixes
@@ -55,5 +61,4 @@ All notable changes to this project will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - Configure dialyzer
-
 
