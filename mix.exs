@@ -50,7 +50,7 @@ defmodule Texture.MixProject do
 
   defp package do
     [
-      licenses: ["MIT"],
+      licenses: ["Apache-2.0"],
       links: %{
         "Github" => @source_url,
         "Changelog" => "https://github.com/lud/texture/blob/main/CHANGELOG.md"
