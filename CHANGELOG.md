@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-05-29
+
+### ⚙️ Miscellaneous Tasks
+
+- Fixed Compilation warnings for Elixir 1.20
+
 ## [1.0.0] - 2026-04-22
 
 ### ⚙️ Miscellaneous Tasks
