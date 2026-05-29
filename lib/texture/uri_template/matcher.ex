@@ -84,7 +84,7 @@ defmodule Texture.UriTemplate.Matcher do
   # after `search`. The search part is discarded.
   defp buf_take_before(url, search, size, acc) do
     case url do
-      <<^search::binary-size(size), rest::binary>> -> {acc, rest}
+      <<^search::binary-size(^size), rest::binary>> -> {acc, rest}
       <<c::utf8, rest::binary>> -> buf_take_before(rest, search, size, <<acc::binary, c::utf8>>)
     end
   end
