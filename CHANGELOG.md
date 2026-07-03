@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-07-03
+
+### 🚀 Features
+
+- Added support for lists of tuples as ordered key/value pairs in URI template rendering
+
+### 🐛 Bug Fixes
+
+- Fixed subtle bugs in URI template matching algorithms
+
+### 📚 Documentation
+
+- Added docs for public API
+
 ## [1.0.1] - 2026-05-29
 
 ### ⚙️ Miscellaneous Tasks
