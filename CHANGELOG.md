@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-07-03
+
+### 🚀 Features
+
+- Implement HTTP Structured Fields RFC 9651 (backwards compatible)
+
 ## [1.1.1] - 2026-07-03
 
 ### ⚡ Performance
