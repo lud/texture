@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-07-03
+
+### ⚡ Performance
+
+- URI templates parser now adds 'end of string' marker at parse-time
+
 ## [1.1.0] - 2026-07-03
 
 ### 🚀 Features
