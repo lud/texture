@@ -57,10 +57,17 @@ defmodule Texture.MixProject do
     [
       annotate: true,
       before_commit: [
+        &readmix/1,
+        {:add, "README.md"},
         &gen_changelog/1,
         {:add, "CHANGELOG.md"}
       ]
     ]
+  end
+
+  def readmix(vsn) do
+    rdmx = Readmix.new(vars: %{app_vsn: vsn})
+    :ok = Readmix.update_file(rdmx, "README.md")
   end
 
   defp gen_changelog(vsn) do
