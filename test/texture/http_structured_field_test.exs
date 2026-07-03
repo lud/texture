@@ -1,5 +1,6 @@
 defmodule Texture.HttpStructuredFieldTest do
   alias Texture.HttpStructuredField
+  alias Texture.HttpStructuredField.Parser
   use ExUnit.Case, async: true
   doctest HttpStructuredField
 
@@ -44,8 +45,6 @@ defmodule Texture.HttpStructuredFieldTest do
 
       assert {:integer, -999_999_999_999_999, []} ==
                ok!(HttpStructuredField.parse_item("-999999999999999"))
-
-      # We do not fail if values are larger as Elixir supports them
     end
   end
 
@@ -214,6 +213,152 @@ defmodule Texture.HttpStructuredFieldTest do
     end
   end
 
+  describe "dates" do
+    test "parses the RFC 9651 example date" do
+      assert {:date, 1_659_578_233, []} == ok!(HttpStructuredField.parse_item("@1659578233"))
+    end
+
+    test "parses epoch" do
+      assert {:date, 0, []} == ok!(HttpStructuredField.parse_item("@0"))
+    end
+
+    test "parses negative date (before epoch)" do
+      assert {:date, -1_659_578_233, []} == ok!(HttpStructuredField.parse_item("@-1659578233"))
+    end
+
+    test "parses required date range boundaries" do
+      # RFC 9651: Parsers MUST support Dates whose values include all days in
+      # years 1 to 9999
+      assert {:date, -62_135_596_800, []} ==
+               ok!(HttpStructuredField.parse_item("@-62135596800"))
+
+      assert {:date, 253_402_214_400, []} ==
+               ok!(HttpStructuredField.parse_item("@253402214400"))
+    end
+
+    test "parses syntactic min/max dates" do
+      # Those are the min/max values of the underlying integer type
+      assert {:date, 999_999_999_999_999, []} ==
+               ok!(HttpStructuredField.parse_item("@999999999999999"))
+
+      assert {:date, -999_999_999_999_999, []} ==
+               ok!(HttpStructuredField.parse_item("@-999999999999999"))
+    end
+
+    test "parses date with parameters" do
+      assert {:date, 1_659_578_233, [{"tz", {:token, "utc"}}]} ==
+               ok!(HttpStructuredField.parse_item("@1659578233;tz=utc"))
+    end
+
+    test "parses date as parameter value" do
+      assert {:token, "cached", [{"expires", {:date, 1_659_578_233}}]} ==
+               ok!(HttpStructuredField.parse_item("cached;expires=@1659578233"))
+    end
+
+    test "invalid date, decimal not allowed" do
+      assert {:error, _} = HttpStructuredField.parse_item("@1659578233.12")
+    end
+
+    test "invalid date, no digits" do
+      assert {:error, _} = HttpStructuredField.parse_item("@")
+      assert {:error, _} = HttpStructuredField.parse_item("@abc")
+      assert {:error, _} = HttpStructuredField.parse_item("@-")
+    end
+  end
+
+  describe "display strings" do
+    test "parses the RFC 9651 example display string" do
+      assert {:display_string, "This is intended for display to üsers.", []} ==
+               ok!(HttpStructuredField.parse_item(~S{%"This is intended for display to %c3%bcsers."}))
+    end
+
+    test "parses empty display string" do
+      assert {:display_string, "", []} == ok!(HttpStructuredField.parse_item(~S{%""}))
+    end
+
+    test "parses ascii-only display string" do
+      assert {:display_string, "hello world", []} ==
+               ok!(HttpStructuredField.parse_item(~S{%"hello world"}))
+    end
+
+    test "parses percent-encoded quote and percent" do
+      assert {:display_string, ~S{say "hi" 100%}, []} ==
+               ok!(HttpStructuredField.parse_item(~S{%"say %22hi%22 100%25"}))
+    end
+
+    test "parses multibyte sequences" do
+      assert {:display_string, "café", []} ==
+               ok!(HttpStructuredField.parse_item(~S{%"caf%c3%a9"}))
+
+      # 4-bytes code point
+      assert {:display_string, "🐡", []} ==
+               ok!(HttpStructuredField.parse_item(~S{%"%f0%9f%90%a1"}))
+    end
+
+    test "backslash is a literal character in display strings" do
+      assert {:display_string, "a\\b", []} == ok!(HttpStructuredField.parse_item(~S{%"a\b"}))
+    end
+
+    test "parses display string with parameters" do
+      assert {:display_string, "ü", [{"lang", {:token, "de"}}]} ==
+               ok!(HttpStructuredField.parse_item(~S{%"%c3%bc";lang=de}))
+    end
+
+    test "parses display string as parameter value" do
+      assert {:integer, 1, [{"msg", {:display_string, "ü"}}]} ==
+               ok!(HttpStructuredField.parse_item(~S{1;msg=%"%c3%bc"}))
+    end
+
+    test "invalid display string, uppercase hex digits" do
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"%C3%BC"})
+    end
+
+    test "invalid display string, incomplete percent escape" do
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"a%"})
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"a%f"})
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"a%zz"})
+    end
+
+    test "invalid display string, invalid UTF-8 after decoding" do
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"%ff"})
+      # truncated 2-bytes sequence
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"%c3"})
+    end
+
+    test "invalid display string, raw non-ascii characters" do
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"ü"})
+    end
+
+    test "invalid display string, raw control characters" do
+      assert {:error, _} = HttpStructuredField.parse_item("%\"a\x00b\"")
+      assert {:error, _} = HttpStructuredField.parse_item("%\"a\x1fb\"")
+    end
+
+    test "invalid display string, unterminated" do
+      assert {:error, _} = HttpStructuredField.parse_item(~S{%"unterminated})
+      assert {:error, _} = HttpStructuredField.parse_item("%")
+    end
+  end
+
+  describe "dates and display strings in lists and dictionaries" do
+    test "list with dates and display strings" do
+      assert [
+               {:date, 1_659_578_233, []},
+               {:display_string, "ü", []},
+               {:inner_list, [{:date, 1, []}], []}
+             ] ==
+               ok!(HttpStructuredField.parse_list(~S{@1659578233, %"%c3%bc", (@1)}))
+    end
+
+    test "dictionary with dates and display strings" do
+      assert [
+               {"created", {:date, 1_659_578_233, []}},
+               {"label", {:display_string, "ü", []}}
+             ] ==
+               ok!(HttpStructuredField.parse_dict(~S{created=@1659578233, label=%"%c3%bc"}))
+    end
+  end
+
   describe "items with parameters" do
     test "parses integer with string parameter" do
       assert {:integer, 2, [{"foourl", {:string, "https://foo.example.com/"}}]} ==
@@ -280,7 +425,7 @@ defmodule Texture.HttpStructuredFieldTest do
       #     implies that fields defined as Lists have a default empty value.
       #
       # So we expect an error for the empty string
-      assert {:error, {:empty, "     \t        "}} =
+      assert {:error, %Parser.Error{reason: {:empty, "     \t        "}}} =
                HttpStructuredField.parse_list("     \t        ")
     end
   end
@@ -472,7 +617,8 @@ defmodule Texture.HttpStructuredFieldTest do
     end
 
     test "parses empty dictionary" do
-      assert {:error, {:empty, "   \t   "}} = HttpStructuredField.parse_dict("   \t   ")
+      assert {:error, %Parser.Error{reason: {:empty, "   \t   "}}} =
+               HttpStructuredField.parse_dict("   \t   ")
     end
   end
 
@@ -486,6 +632,13 @@ defmodule Texture.HttpStructuredFieldTest do
       assert [
                {"foo", {:integer, 2, []}}
              ] == ok!(HttpStructuredField.parse_dict("foo=1, foo=2"))
+    end
+
+    test "dictionary duplicate keys keep their first position" do
+      assert [
+               {"a", {:integer, 3, []}},
+               {"b", {:integer, 2, []}}
+             ] == ok!(HttpStructuredField.parse_dict("a=1, b=2, a=3"))
     end
 
     test "dictionary with very long key (edge case)" do
@@ -563,8 +716,6 @@ defmodule Texture.HttpStructuredFieldTest do
 
       assert {:decimal, -999_999_999_999.999, []} ==
                ok!(HttpStructuredField.parse_item("-999999999999.999"))
-
-      # Elixir supports larger values so we do not fail in that case
     end
 
     test "decimal with trailing zeros in fractional part" do
@@ -714,6 +865,11 @@ defmodule Texture.HttpStructuredFieldTest do
                ok!(HttpStructuredField.parse_item("1;foo=1;foo=2;foo=3"))
     end
 
+    test "duplicate parameter keys keep their first position" do
+      assert {:token, "a", [{"b", {:integer, 3}}, {"c", {:integer, 2}}]} ==
+               ok!(HttpStructuredField.parse_item("a;b=1;c=2;b=3"))
+    end
+
     test "parameter key with invalid characters" do
       assert {:error, _} = HttpStructuredField.parse_item("1;UPPER=2")
       assert {:error, _} = HttpStructuredField.parse_item("1;123=2")
@@ -845,6 +1001,78 @@ defmodule Texture.HttpStructuredFieldTest do
     end
   end
 
+  describe "parse errors" do
+    test "errors are Parser.Error exceptions with the full input as value" do
+      assert {:error, %Parser.Error{reason: {:invalid_value, "not@@valid"}, value: "not@@valid"}} =
+               HttpStructuredField.parse_item("not@@valid")
+
+      assert {:error, %Parser.Error{reason: {:invalid_value, "???"}, value: "sugar, ???"}} =
+               HttpStructuredField.parse_list("sugar, ???")
+
+      assert {:error, %Parser.Error{reason: {:invalid_key, "UPPER=1"}, value: "a=1, UPPER=1"}} =
+               HttpStructuredField.parse_dict("a=1, UPPER=1")
+    end
+
+    test "exceptions have a message" do
+      assert {:error, %Parser.Error{} = err} = HttpStructuredField.parse_item("not@@valid")
+      assert Exception.message(err) =~ "not@@valid"
+      assert Exception.message(err) =~ "invalid_value"
+    end
+  end
+
+  describe "parser bang functions" do
+    test "parse_item! returns the item or raises" do
+      assert {:integer, 5, [{"foo", {:token, "bar"}}]} = Parser.parse_item!("5; foo=bar")
+
+      assert_raise Parser.Error, fn -> Parser.parse_item!("not@@valid") end
+    end
+
+    test "parse_list! returns the list or raises" do
+      assert [{:token, "sugar", []}, {:token, "tea", []}] = Parser.parse_list!("sugar, tea")
+
+      assert_raise Parser.Error, fn -> Parser.parse_list!("sugar, tea,") end
+    end
+
+    test "parse_dict! returns the pairs or raises" do
+      assert [{"a", {:integer, 1, []}}, {"b", {:boolean, true, []}}] = Parser.parse_dict!("a=1, b")
+
+      assert_raise Parser.Error, fn -> Parser.parse_dict!("a=1,, b=2") end
+    end
+  end
+
+  describe "numeric size limits" do
+    test "integers are limited to 15 digits" do
+      # 999999999999999 (15 digits) is asserted valid in the integers suite
+      assert {:error, _} = HttpStructuredField.parse_item("1234567890123456")
+      assert {:error, _} = HttpStructuredField.parse_item("-1234567890123456")
+      assert {:error, _} = HttpStructuredField.parse_item(String.duplicate("0", 16))
+    end
+
+    test "decimals are limited to 12 integer digits" do
+      # 999999999999.999 is asserted valid in the decimals suite
+      assert {:error, _} = HttpStructuredField.parse_item("1234567890123.0")
+      assert {:error, _} = HttpStructuredField.parse_item("-1234567890123.0")
+    end
+
+    test "decimals are limited to 3 fractional digits" do
+      assert {:error, _} = HttpStructuredField.parse_item("1.2345")
+      assert {:error, _} = HttpStructuredField.parse_item("-1.2345")
+    end
+
+    test "dates are limited to 15 digits" do
+      # @999999999999999 is asserted valid in the dates suite
+      assert {:error, _} = HttpStructuredField.parse_item("@1000000000000000")
+      assert {:error, _} = HttpStructuredField.parse_item("@-1000000000000000")
+    end
+
+    test "huge decimals return an error instead of overflowing" do
+      # Without digit limits this input would overflow the float range
+      input = String.duplicate("9", 400) <> ".0"
+      assert {:error, %Parser.Error{}} = HttpStructuredField.parse_item(input)
+      assert {:error, %Parser.Error{}} = HttpStructuredField.parse_item("a;x=" <> input)
+    end
+  end
+
   describe "with unwrap: true option" do
     test "unwrapped integers" do
       assert {42, []} == ok!(HttpStructuredField.parse_item("42", unwrap: true))
@@ -910,6 +1138,14 @@ defmodule Texture.HttpStructuredFieldTest do
 
       assert {true, [{"flag", "active"}]} ==
                ok!(HttpStructuredField.parse_item("?1; flag=active", unwrap: true))
+    end
+
+    test "unwrapped dates and display strings" do
+      assert {1_659_578_233, []} ==
+               ok!(HttpStructuredField.parse_item("@1659578233", unwrap: true))
+
+      assert {"ü", [{"since", 1}]} ==
+               ok!(HttpStructuredField.parse_item(~S{%"%c3%bc";since=@1}, unwrap: true))
     end
 
     test "unwrapped inner lists" do
@@ -1021,6 +1257,14 @@ defmodule Texture.HttpStructuredFieldTest do
 
       assert {:boolean, true, %{"flag" => {:token, "active"}}} ==
                ok!(HttpStructuredField.parse_item("?1; flag=active", maps: true))
+    end
+
+    test "dates and display strings with maps for parameters" do
+      assert {:date, 1_659_578_233, %{}} ==
+               ok!(HttpStructuredField.parse_item("@1659578233", maps: true))
+
+      assert {:display_string, "ü", %{"since" => {:date, 1}}} ==
+               ok!(HttpStructuredField.parse_item(~S{%"%c3%bc";since=@1}, maps: true))
     end
 
     test "inner lists with maps for parameters and dictionaries" do

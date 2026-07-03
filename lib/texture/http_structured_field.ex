@@ -2,7 +2,12 @@ defmodule Texture.HttpStructuredField do
   alias Texture.HttpStructuredField.Parser
 
   @moduledoc ~S"""
-  HTTP Structured Field parser implementation following RFC 8941.
+  HTTP Structured Field parser implementation following RFC 9651 (which
+  obsoletes RFC 8941).
+
+  All bare item types are supported: Integers, Decimals, Strings, Tokens,
+  Byte Sequences, Booleans, as well as Dates and Display Strings introduced
+  by RFC 9651.
 
   This module exposes high-level helpers to parse the three Structured Field
   top-level types defined by the RFC:
@@ -43,10 +48,14 @@ defmodule Texture.HttpStructuredField do
 
   ### Error handling
 
-  On invalid input an `{:error, {reason, remainder}}` tuple is returned:
+  On invalid input an `{:error, error}` tuple is returned, where the error is
+  a `Texture.HttpStructuredField.Parser.Error` exception. The exception
+  carries the full input in `:value` and a `{tag, remainder}` tuple in
+  `:reason` pointing at the failing part of the input:
 
-      iex> Texture.HttpStructuredField.parse_item("not@@valid")
-      {:error, {:invalid_value, "not@@valid"}}
+      iex> {:error, err} = Texture.HttpStructuredField.parse_item("not@@valid")
+      iex> err
+      %Texture.HttpStructuredField.Parser.Error{reason: {:invalid_value, "not@@valid"}, value: "not@@valid"}
   """
 
   @type option :: {:maps, boolean} | {:unwrap, boolean}
@@ -54,7 +63,16 @@ defmodule Texture.HttpStructuredField do
   @type item :: wrapped_item | unwrapped_item
   @type wrapped_item :: {tag, value, attrs}
   @type unwrapped_item :: {value, attrs}
-  @type tag :: :integer | :decimal | :string | :token | :byte_sequence | :boolean | :inner_list
+  @type tag ::
+          :integer
+          | :decimal
+          | :string
+          | :token
+          | :byte_sequence
+          | :boolean
+          | :date
+          | :display_string
+          | :inner_list
   @type value :: term
   @type attrs :: Enumerable.t(attribute)
   @type attribute :: wrapped_attribute | unwrapped_attribute
@@ -79,6 +97,17 @@ defmodule Texture.HttpStructuredField do
 
       iex> Texture.HttpStructuredField.parse_item("123")
       {:ok, {:integer, 123, []}}
+
+  Dates are returned as Unix timestamps in seconds (use `DateTime.from_unix!/1`
+  to convert them):
+
+      iex> Texture.HttpStructuredField.parse_item("@1659578233")
+      {:ok, {:date, 1659578233, []}}
+
+  Display strings are decoded to UTF-8 binaries:
+
+      iex> Texture.HttpStructuredField.parse_item(~S{%"caf%c3%a9"})
+      {:ok, {:display_string, "café", []}}
 
   Item with boolean (implicit) and integer parameters:
 
@@ -226,7 +255,7 @@ defmodule Texture.HttpStructuredField do
 
   defp trim_not_empty(input) do
     case String.trim(input) do
-      "" -> Parser.error(:empty, input)
+      "" -> {:error, %Parser.Error{reason: {:empty, input}, value: input}}
       rest -> {:ok, rest}
     end
   end
@@ -255,7 +284,7 @@ defmodule Texture.HttpStructuredField do
   end
 
   defp post_process_item({type, value, params}, unwrap?, maps?)
-       when type in [:integer, :decimal, :string, :token, :byte_sequence, :boolean] do
+       when type in [:integer, :decimal, :string, :token, :byte_sequence, :boolean, :date, :display_string] do
     params = post_process_params(params, unwrap?, maps?)
 
     if unwrap? do
