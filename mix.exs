@@ -30,13 +30,8 @@ defmodule Texture.MixProject do
       {:abnf_parsec, "~> 2.0"},
 
       # Dev
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-
-      # Test
-      {:ex_check, "~> 0.16.0", only: [:dev, :test], runtime: false},
-      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
+      {:libdev, ">= 0.0.0", only: [:dev, :test], runtime: false},
+      {:readmix, ">= 0.0.0", only: [:dev, :test], runtime: false}
     ]
   end
 
