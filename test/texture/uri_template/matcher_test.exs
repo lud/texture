@@ -867,11 +867,15 @@ defmodule Texture.UriTemplate.MatcherTest do
     end
 
     test "path segment with trailing slash handling" do
-      # extra trailing slash should not match if not expected
       template = "{/foo}"
       values = %{"foo" => "value"}
       assert "/value" = url = render!(template, values)
       assert %{"foo" => "value"} == match_template!(template, url)
+
+      # an extra trailing slash does not match if the template does not expect it
+      assert_raise TemplateMatchError, ~r{extra values}, fn ->
+        match_template!(template, "/value/")
+      end
 
       # If the template has literal text after, the slash matters
       template = "{/foo}/"
@@ -930,7 +934,13 @@ defmodule Texture.UriTemplate.MatcherTest do
     end
 
     test "invalid UTF-8 in the URL" do
+      # detected while scanning for an interior literal
       assert_raise TemplateMatchError, ~r{invalid UTF-8}, fn ->
+        match_template!("/x/{foo}/mid/{bar}", <<"/x/a", 255, "b/mid/c">>)
+      end
+
+      # an invalid byte in a value is rejected as a match failure
+      assert_raise TemplateMatchError, ~r{invalid match before}, fn ->
         match_template!("/x/{foo}", <<"/x/a", 255, "b">>)
       end
     end
@@ -990,6 +1000,72 @@ defmodule Texture.UriTemplate.MatcherTest do
       # Ensures prefix matching is strict
       assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
         match_template!("{?search}", "search=term")
+      end
+    end
+  end
+
+  describe "values colliding with literal parts" do
+    # The matcher anchors the leading literal at the start of the URL and the
+    # final literal at the end, and binds interior literals on their first
+    # occurrence. These tests document how values containing literal text
+    # interact with that policy.
+
+    test "value equal to the leading literal" do
+      template = "/foo/{a}"
+      assert "/foo/foo" = url = render!(template, %{"a" => "foo"})
+      assert %{"a" => "foo"} == match_template!(template, url)
+    end
+
+    test "value equal to the final literal" do
+      template = "https://example{/value*}/foo"
+      assert "https://example/foo/foo" = url = render!(template, %{"value" => ["foo"]})
+      assert %{"value" => ["foo"]} == match_template!(template, url)
+    end
+
+    test "value ending with the final literal" do
+      template = "/files/{name}.json"
+      assert "/files/a.json.b.json" = url = render!(template, %{"name" => "a.json.b"})
+      assert %{"name" => "a.json.b"} == match_template!(template, url)
+    end
+
+    test "value containing an interior literal splits on the first occurrence" do
+      # Rendering is lossy: this url is the rendering of both
+      # name="archive.tar", ext="gz" and name="archive", ext="tar.gz". The
+      # matcher binds the "." literal on its first occurrence.
+      template = "/files/{name}.{ext}"
+      assert "/files/archive.tar.gz" = url = render!(template, %{"name" => "archive.tar", "ext" => "gz"})
+      assert %{"name" => "archive", "ext" => "tar.gz"} == match_template!(template, url)
+
+      assert %{"a" => "x", "b" => "y-z"} == match_template!("{a}-{b}", "x-y-z")
+    end
+
+    test "interior literal occurrences must match entirely" do
+      # the ".x" in the value is not mistaken for the start of the ".x.y"
+      # literal
+      template = "{a}.x.y{b}"
+      assert "p.x.x.y2" = url = render!(template, %{"a" => "p.x", "b" => "2"})
+      assert %{"a" => "p.x", "b" => "2"} == match_template!(template, url)
+    end
+
+    test "value equal to a following interior literal is not matchable" do
+      # This url is a legitimate rendering of value="foo", bar="x", but the
+      # matcher binds the "/foo/" literal on its first occurrence. This leaves
+      # an empty chunk for the {/value} expression and "foo/x" for {bar},
+      # which fails on the extra "/x".
+      template = "https://example{/value}/foo/{bar}"
+      url = "https://example/foo/foo/x"
+      assert ^url = render!(template, %{"value" => "foo", "bar" => "x"})
+
+      assert_raise TemplateMatchError, ~r{invalid match before}, fn ->
+        match_template!(template, url)
+      end
+
+      # same with an exploded path segment
+      template = "https://example{/value*}/foo/{bar}"
+      assert ^url = render!(template, %{"value" => ["foo"], "bar" => "x"})
+
+      assert_raise TemplateMatchError, ~r{invalid match before}, fn ->
+        match_template!(template, url)
       end
     end
   end

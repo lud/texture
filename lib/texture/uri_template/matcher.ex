@@ -3,20 +3,11 @@ defmodule Texture.UriTemplate.Matcher do
 
   alias Texture.UriTemplate.TemplateMatchError
 
-  @eos (if Mix.env() == :test do
-          "终"
-        else
-          <<0>>
-        end)
-
   @spec match!(Texture.UriTemplate.t(), String.t()) :: map()
   def match!(%Texture.UriTemplate{} = t, url) do
-    # always finish with a null string terminator so we can match on
-    # end-of-string
-    parts = append_eos(t.parts)
-    url = url <> @eos
-
-    case split_on_literals(parts, url, []) do
+    # parts finish with an :eos marker (appended at parse time) so the last
+    # literal or expression is anchored to the end of the url
+    case split_on_literals(t.parts, url, []) do
       [] ->
         %{}
 
@@ -28,18 +19,6 @@ defmodule Texture.UriTemplate.Matcher do
       reraise %TemplateMatchError{message: e.message <> " in URI #{url}", url: url}, __STACKTRACE__
   end
 
-  defp append_eos([{:expr, _, _} = last]) do
-    [last, {:lit, @eos}]
-  end
-
-  defp append_eos([{:lit, lit}]) do
-    [{:lit, lit <> @eos}]
-  end
-
-  defp append_eos([h, next | t]) do
-    [h | append_eos([next | t])]
-  end
-
   defp merge_chunk_params({exprs, url_part}, params) do
     case extract_chunk(exprs, url_part) do
       {add_params, ""} -> Map.merge(params, add_params)
@@ -49,23 +28,31 @@ defmodule Texture.UriTemplate.Matcher do
 
   # First we will seek every literal in the url, discarding the associated
   # parts, and generate chunks associating the skipped buffer and the expression
-  # parts that were in between
-  defp split_on_literals(parts, url, acc)
-
-  defp split_on_literals([], "", acc) do
-    # Chunks are not reversed, so if a variable is used multiple times, the
-    # matches on the beginning on the URL will take precedence.
-    acc
-  end
-
+  # parts that were in between.
+  #
+  # Chunks are not reversed, so if a variable is used multiple times, the
+  # matches on the beginning on the URL will take precedence.
   defp split_on_literals(parts, url, acc) do
-    # parts and url always finish with a literal <<0>> so we will always get a
-    # remainder with expressions or an empty list
     case seek_next_lit_part(parts) do
+      {[], [:eos]} ->
+        case url do
+          "" -> acc
+          rest -> raise TemplateMatchError, "invalid match before #{inspect(rest)}"
+        end
+
       {[], [{:lit, search} | parts]} ->
         rest = buf_delete(url, search)
 
         split_on_literals(parts, rest, acc)
+
+      {expr_parts, [:eos]} ->
+        # trailing expressions consume the whole remainder of the url
+        [{expr_parts, url} | acc]
+
+      {expr_parts, [{:lit, search}, :eos]} ->
+        # the last literal is anchored to the end of the url
+        before_lit = buf_take_suffix(url, search, byte_size(search))
+        [{expr_parts, before_lit} | acc]
 
       {expr_parts, [{:lit, search} | parts]} ->
         # buf_take_before will return left=the string before the seeked
@@ -76,6 +63,21 @@ defmodule Texture.UriTemplate.Matcher do
         acc = [chunk | acc]
         split_on_literals(parts, after_lit, acc)
     end
+  end
+
+  # the last literal of the template must match the end of the url
+  defp buf_take_suffix(url, search, search_size) when byte_size(url) >= search_size do
+    # rebuild the size of what has been matched in the URL as expr_parts
+    before_size = byte_size(url) - search_size
+
+    case url do
+      <<before_lit::binary-size(^before_size), ^search::binary>> -> before_lit
+      _other -> raise TemplateMatchError, "could not find literal #{inspect(search)}"
+    end
+  end
+
+  defp buf_take_suffix(_url, search, _size) do
+    raise TemplateMatchError, "could not find literal #{inspect(search)}"
   end
 
   defp buf_take_before(url, search, size, acc \\ <<>>)
@@ -127,8 +129,8 @@ defmodule Texture.UriTemplate.Matcher do
     {:lists.reverse(acc), parts}
   end
 
-  defp seek_next_lit_part([], acc) do
-    {:lists.reverse(acc), []}
+  defp seek_next_lit_part([:eos], acc) do
+    {:lists.reverse(acc), [:eos]}
   end
 
   defp extract_chunk(exprs, url_part) do

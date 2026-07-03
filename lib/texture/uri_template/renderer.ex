@@ -20,6 +20,10 @@ defmodule Texture.UriTemplate.Renderer do
     lit
   end
 
+  defp render_part(:eos, _) do
+    ""
+  end
+
   defp render_part({:expr, op, varlist}, params) do
     render_expr(op, varlist, params)
   end

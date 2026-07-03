@@ -120,6 +120,21 @@ defmodule Texture.UriTemplate do
     parts
     |> post_parse_literals()
     |> Enum.map(&post_parse_part/1)
+    |> append_eos()
+  end
+
+  # The parts list is terminated with an :eos marker used by the matcher to
+  # anchor the last literal or expression to the end of the url.
+  defp append_eos([last]) do
+    [last, :eos]
+  end
+
+  defp append_eos([h, next | t]) do
+    [h | append_eos([next | t])]
+  end
+
+  defp append_eos([]) do
+    [:eos]
   end
 
   defp post_parse_literals(parts) do
@@ -580,6 +595,25 @@ defmodule Texture.UriTemplate do
       iex> t = Texture.UriTemplate.parse!("{foo}/{foo}")
       iex> Texture.UriTemplate.match!(t, "first/second")
       %{"foo" => "first"}
+
+  ### Literal Collisions
+
+  Matching anchors the template's leading literal at the start of the URL and
+  its final literal at the end, and binds interior literals on their first
+  occurrence. A URL where a value contains the text of an interior literal is
+  ambiguous, and the first occurrence decides the split:
+
+      iex> t = Texture.UriTemplate.parse!("/files/{name}.{ext}")
+      iex> Texture.UriTemplate.match!(t, "/files/archive.tar.gz")
+      %{"name" => "archive", "ext" => "tar.gz"}
+
+  For the same reason, a value equal to the text of a following interior
+  literal binds that literal at the position of the value, and the match
+  fails on the URL part left after the literal:
+
+      iex> t = Texture.UriTemplate.parse!("https://example{/value}/foo/{bar}")
+      iex> Texture.UriTemplate.match!(t, "https://example/foo/foo/x")
+      ** (Texture.UriTemplate.TemplateMatchError) invalid match before "/x" in URI https://example/foo/foo/x
 
   ### Error Cases
 
