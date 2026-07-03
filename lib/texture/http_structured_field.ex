@@ -7,17 +7,18 @@ defmodule Texture.HttpStructuredField do
   This module exposes high-level helpers to parse the three Structured Field
   top-level types defined by the RFC:
 
-    * items (single bare item with optional parameters)
-    * lists (comma separated sequence of items or inner lists)
-    * dictionaries (comma separated key / item pairs – bare keys imply a true boolean)
+    * items with `parse_item/2` (a single bare item with optional parameters)
+    * lists with `parse_list/2` (a comma separated sequence of items or inner lists)
+    * dictionaries with `parse_dict/2` (a comma separated sequence of key/item
+      pairs, where a bare key implies a `true` boolean)
 
   Returned data is, by default, tagged with the parsed value type. You can opt
   into two orthogonal transformations using options:
 
-    * `unwrap: true` – remove the type tag wrapper from items and attributes
-    * `maps: true` – turn attribute collections and dictionaries into maps
+    * `unwrap: true` - remove the type tag wrapper from items and attributes
+    * `maps: true` - turn attribute collections and dictionaries into maps
 
-  ## Shapes
+  ### Shapes
 
   By default (no options):
 
@@ -40,7 +41,39 @@ defmodule Texture.HttpStructuredField do
   Both options compose: `unwrap: true, maps: true` yields unwrapped values and
   maps for every attribute / dictionary collection.
 
-  ## Parsing a single item
+  ### Error handling
+
+  On invalid input an `{:error, {reason, remainder}}` tuple is returned:
+
+      iex> Texture.HttpStructuredField.parse_item("not@@valid")
+      {:error, {:invalid_value, "not@@valid"}}
+  """
+
+  @type option :: {:maps, boolean} | {:unwrap, boolean}
+
+  @type item :: wrapped_item | unwrapped_item
+  @type wrapped_item :: {tag, value, attrs}
+  @type unwrapped_item :: {value, attrs}
+  @type tag :: :integer | :decimal | :string | :token | :byte_sequence | :boolean | :inner_list
+  @type value :: term
+  @type attrs :: Enumerable.t(attribute)
+  @type attribute :: wrapped_attribute | unwrapped_attribute
+  @type wrapped_attribute :: {binary, {tag, value}}
+  @type unwrapped_attribute :: {binary, value}
+
+  @doc """
+  Parses a structured field item, a single bare value with optional parameters.
+
+  Returns `{:ok, item}` where the item is a `{type, value, params}` tuple, or
+  `{:error, reason}` on invalid input. See the module documentation for the
+  returned shapes.
+
+  ### Options
+
+    * `:unwrap` - when `true`, removes the type tag from values and parameters.
+    * `:maps` - when `true`, collects parameters into a map.
+
+  ### Examples
 
   An item with no parameters:
 
@@ -66,8 +99,24 @@ defmodule Texture.HttpStructuredField do
 
       iex> Texture.HttpStructuredField.parse_item("123;a;b=5", unwrap: true, maps: true)
       {:ok, {123, %{"a" => true, "b" => 5}}}
+  """
+  @spec parse_item(binary, [option]) :: {:ok, item} | {:error, term}
+  def parse_item(input, opts \\ []) do
+    with {:ok, input} <- trim_not_empty(input),
+         {:ok, item, ""} <- Parser.parse_item(input) do
+      {:ok, post_process_item(item, opts)}
+    end
+  end
 
-  ## Parsing a list
+  @doc ~S"""
+  Parses a structured field list, a comma separated sequence of items or inner
+  lists.
+
+  Returns `{:ok, items}` or `{:error, reason}` on invalid input. Accepts the
+  same options as `parse_item/2`. See the module documentation for the returned
+  shapes.
+
+  ### Examples
 
   A list can contain bare items and inner lists:
 
@@ -100,8 +149,25 @@ defmodule Texture.HttpStructuredField do
         {"hi", %{"a" => 1}},
         {[{1, %{}}, {2, %{}}, {3, %{}}], %{"p" => true}}
       ]}
+  """
+  @spec parse_list(binary, [option]) :: {:ok, [item]} | {:error, term}
+  def parse_list(input, opts \\ []) do
+    with {:ok, input} <- trim_not_empty(input),
+         {:ok, list, ""} <- Parser.parse_list(input) do
+      {:ok, post_process_list(list, opts)}
+    end
+  end
 
-  ## Parsing a dictionary
+  @doc ~S"""
+  Parses a structured field dictionary, a comma separated sequence of key/item
+  pairs. A bare key implies a `true` boolean value.
+
+  Returns `{:ok, pairs}` where pairs is a list of `{key, item}` tuples (or a
+  map with the `:maps` option), or `{:error, reason}` on invalid input. Accepts
+  the same options as `parse_item/2`. See the module documentation for the
+  returned shapes.
+
+  ### Examples
 
   Example with explicit and implicit boolean members plus inner list:
 
@@ -149,46 +215,7 @@ defmodule Texture.HttpStructuredField do
         "foo" => {123, %{}},
         "qux" => {[{1, %{}}, {2, %{}}], %{"p" => true}}
       }}
-
-  ## Error handling
-
-  On invalid input an `{:error, {reason, remainder}}` tuple is returned:
-
-      iex> Texture.HttpStructuredField.parse_item("not@@valid")
-      {:error, {:invalid_value, "not@@valid"}}
-
-  The low-level tokenization lives in the private `Parser` module; only the
-  post-processing (unwrap / maps) occurs here.
   """
-
-  @type option :: {:maps, boolean} | {:unwrap, boolean}
-
-  @type item :: wrapped_item | unwrapped_item
-  @type wrapped_item :: {tag, value, attrs}
-  @type unwrapped_item :: {value, attrs}
-  @type tag :: :integer | :decimal | :string | :token | :byte_sequence | :boolean | :inner_list
-  @type value :: term
-  @type attrs :: Enumerable.t(attribute)
-  @type attribute :: wrapped_attribute | unwrapped_attribute
-  @type wrapped_attribute :: {binary, {tag, value}}
-  @type unwrapped_attribute :: {binary, value}
-
-  @spec parse_item(binary, [option]) :: {:ok, item} | {:error, term}
-  def parse_item(input, opts \\ []) do
-    with {:ok, input} <- trim_not_empty(input),
-         {:ok, item, ""} <- Parser.parse_item(input) do
-      {:ok, post_process_item(item, opts)}
-    end
-  end
-
-  @spec parse_list(binary, [option]) :: {:ok, [item]} | {:error, term}
-  def parse_list(input, opts \\ []) do
-    with {:ok, input} <- trim_not_empty(input),
-         {:ok, list, ""} <- Parser.parse_list(input) do
-      {:ok, post_process_list(list, opts)}
-    end
-  end
-
   @spec parse_dict(binary, [option]) :: {:ok, Enumerable.t({binary, item})} | {:error, term}
   def parse_dict(input, opts \\ []) do
     with {:ok, input} <- trim_not_empty(input),
@@ -204,6 +231,18 @@ defmodule Texture.HttpStructuredField do
     end
   end
 
+  @doc """
+  Applies the `:unwrap` and `:maps` transformations to an item already parsed
+  with the default options.
+
+  Accepts the same options as `parse_item/2`.
+
+  ### Examples
+
+      iex> {:ok, item} = Texture.HttpStructuredField.parse_item("123;a")
+      iex> Texture.HttpStructuredField.post_process_item(item, unwrap: true, maps: true)
+      {123, %{"a" => true}}
+  """
   @spec post_process_item(item, [option]) :: item
   def post_process_item(elem, opts) do
     maps? = true == opts[:maps]
@@ -237,6 +276,12 @@ defmodule Texture.HttpStructuredField do
     end
   end
 
+  @doc """
+  Applies the `:unwrap` and `:maps` transformations to each item of a list
+  already parsed with the default options.
+
+  Accepts the same options as `parse_item/2`.
+  """
   @spec post_process_list([item], [option]) :: [item]
   def post_process_list(list, opts) do
     maps? = true == opts[:maps]
@@ -252,6 +297,12 @@ defmodule Texture.HttpStructuredField do
     Enum.map(list, &post_process_item(&1, unwrap?, maps?))
   end
 
+  @doc """
+  Applies the `:unwrap` and `:maps` transformations to a dictionary already
+  parsed with the default options.
+
+  Accepts the same options as `parse_item/2`.
+  """
   @spec post_process_dict(Enumerable.t({binary, item}), [option]) :: Enumerable.t({binary, item})
   def post_process_dict(dict, opts) do
     maps? = true == opts[:maps]

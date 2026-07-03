@@ -28,7 +28,8 @@ defmodule Texture.UriTemplate do
       iex> Texture.UriTemplate.render(t, %{ver: "v1", res: ["users", 42], q: "café", lang: :fr, page: 2})
       "https://ex.com/v1/users/42?q=caf%C3%A9&lang=fr&page=2"
 
-  Reserved expansion keeps reserved characters (e.g. '+'):
+  Reserved expansion, with the `+` operator, keeps reserved characters such as
+  `/` unencoded:
 
       iex> {:ok, t} = Texture.UriTemplate.parse("/files{+path}")
       iex> Texture.UriTemplate.render(t, %{path: "/a/b c"})
@@ -96,6 +97,15 @@ defmodule Texture.UriTemplate do
     end
   end
 
+  @doc """
+  Same as `parse/1` but raises an `ArgumentError` on invalid templates.
+
+  ### Examples
+
+      iex> template = Texture.UriTemplate.parse!("/users/{id}")
+      iex> Texture.UriTemplate.render(template, %{id: 123})
+      "/users/123"
+  """
   @spec parse!(binary) :: t
   def parse!(data) do
     case parse(data) do
@@ -434,7 +444,7 @@ defmodule Texture.UriTemplate do
   ## More Complex Examples
 
       iex> t = Texture.UriTemplate.parse!("http://example.com/search{?foo*,bar}")
-      iex> Texture.UriTemplate.match!(t, "http://example.com/search?foo=1&foo=2&foo=3&bar=hello")
+      iex> Texture.UriTemplate.match!(t, "http://example.com/search?foo=1&foo=2&bar=hello&foo=3")
       %{"foo" => ["1", "2", "3"], "bar" => "hello"}
 
       iex> t = Texture.UriTemplate.parse!("http://example.com/api{?map*,simple}")
