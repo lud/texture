@@ -27,4 +27,7 @@ docs:
 changelog:
   git cliff -o CHANGELOG.md
 
-check: _mix_deps format _libdev_check _git_status
+readme:
+  mix rdmx.update README.md
+
+check: _mix_deps format _libdev_check readme _git_status
