@@ -403,8 +403,8 @@ defmodule Texture.UriTemplate.MatcherTest do
       # lists cannot be treated as keys though
       assert_raise TemplateMatchError, ~r{only key/values}, fn -> match_template!("{?foo}", "?foo,bar") end
 
-      # using equal sing in the value is not supported
-      assert_raise TemplateMatchError, ~r{invalid parameter syntax}, fn -> match_template!("{?foo}", "?foo==bar") end
+      # everything after the first equal sign belongs to the value
+      assert %{"foo" => "=bar"} == match_template!("{?foo}", "?foo==bar")
 
       # trailing ampersand should be ignored
       assert %{"foo" => "value"} == match_template!("{?foo}", "?foo=value&")
@@ -903,16 +903,40 @@ defmodule Texture.UriTemplate.MatcherTest do
       end
     end
 
-    test "invalid parameter syntax - multiple equals signs" do
-      # Query parameter with double equals in value is not supported
-      assert_raise TemplateMatchError, ~r{invalid parameter syntax}, fn ->
-        match_template!("{?foo}", "?foo==bar")
-      end
+    test "equals signs in query values" do
+      # everything after the first equal sign belongs to the value, as in
+      # unencoded base64 padding
+      assert %{"foo" => "=bar"} == match_template!("{?foo}", "?foo==bar")
+      assert %{"token" => "abc="} == match_template!("{?token}", "?token=abc=")
 
-      # Regular parameter with invalid syntax - too many equals
-      assert_raise TemplateMatchError, ~r{invalid parameter syntax}, fn ->
+      # a key=value pair is still rejected by a non-exploded default parameter
+      assert_raise TemplateMatchError, ~r{unexpected dictionary values}, fn ->
         match_template!("{foo}", "a=b=c")
       end
+    end
+
+    test "unsupported operators raise a match error" do
+      for template <- ["{+foo}", "{#foo}", "{.foo}", "{;foo}", "{&foo}"] do
+        assert_raise TemplateMatchError, ~r{is not supported for matching}, fn ->
+          match_template!(template, "whatever")
+        end
+      end
+    end
+
+    test "could not find literal - literal missing in the middle of the URL" do
+      assert_raise TemplateMatchError, ~r{could not find literal}, fn ->
+        match_template!("/a/{x}/b/{y}", "/a/1/c/2")
+      end
+    end
+
+    test "invalid UTF-8 in the URL" do
+      assert_raise TemplateMatchError, ~r{invalid UTF-8}, fn ->
+        match_template!("/x/{foo}", <<"/x/a", 255, "b">>)
+      end
+    end
+
+    test "colon is allowed in values" do
+      assert %{"foo" => "a:b"} == match_template!("/x/{foo}", "/x/a:b")
     end
 
     test "unexpected dictionary values - dict in non-exploded position" do

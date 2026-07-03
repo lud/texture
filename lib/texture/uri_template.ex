@@ -416,7 +416,7 @@ defmodule Texture.UriTemplate do
   * **Query** (`?`): `{?foo}`
 
   Other operators like `+`, `#`, `.`, `;`, `&` are **not supported** for
-  matching.
+  matching and raise a `Texture.UriTemplate.TemplateMatchError`.
 
   ## Unsupported Features
 
@@ -468,8 +468,8 @@ defmodule Texture.UriTemplate do
   ### List Matching
 
   * Lists are comma-separated in default and query operators
-  * With other operators,lLists are comma-separated only when the parameter is
-    not exploded .
+  * With other operators, lists are comma-separated only when the parameter is
+    not exploded
   * With multiple parameters, the last accumulates remaining values as a list
   * Insufficient values assign `nil` to remaining parameters
 
@@ -536,6 +536,8 @@ defmodule Texture.UriTemplate do
 
   * Percent-encoding is handled automatically
   * Unicode characters are properly decoded
+  * In `key=value` pairs the value starts after the first `=`, so further `=`
+    characters belong to the value (`?token=abc=` gives `"abc="`)
 
   Examples:
 
@@ -566,10 +568,12 @@ defmodule Texture.UriTemplate do
 
   Raises `Texture.UriTemplate.TemplateMatchError` when:
 
+  * The template uses an operator or modifier that is not supported for matching
+  * A literal part of the template cannot be found in the URL
   * Non-exploded parameter receives dict syntax unexpectedly
   * Extra path segment values don't match template structure
-  * Invalid parameter syntax (e.g., `foo==bar`)
   * Lists treated as keys in wrong context
+  * The URL contains invalid UTF-8
   """
   @spec match!(t, binary) :: %{binary => term}
   def match!(%__MODULE__{} = t, url) do

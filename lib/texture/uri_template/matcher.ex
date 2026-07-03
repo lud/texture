@@ -84,8 +84,17 @@ defmodule Texture.UriTemplate.Matcher do
   # after `search`. The search part is discarded.
   defp buf_take_before(url, search, size, acc) do
     case url do
-      <<^search::binary-size(^size), rest::binary>> -> {acc, rest}
-      <<c::utf8, rest::binary>> -> buf_take_before(rest, search, size, <<acc::binary, c::utf8>>)
+      <<^search::binary-size(^size), rest::binary>> ->
+        {acc, rest}
+
+      <<c::utf8, rest::binary>> ->
+        buf_take_before(rest, search, size, <<acc::binary, c::utf8>>)
+
+      <<>> ->
+        raise TemplateMatchError, "could not find literal #{inspect(search)}"
+
+      <<byte, _::binary>> ->
+        raise TemplateMatchError, "invalid UTF-8 byte #{inspect(byte)} in URL"
     end
   end
 
@@ -144,6 +153,7 @@ defmodule Texture.UriTemplate.Matcher do
         :default -> {nil, ?,, nil}
         "/" -> {?/, ?/, ?,}
         "?" -> {??, ?&, ?,}
+        other -> raise TemplateMatchError, "operator #{inspect(other)} is not supported for matching"
       end
 
     url_part =
@@ -165,14 +175,14 @@ defmodule Texture.UriTemplate.Matcher do
   def take_multi(url, opts) do
     param_sep = Keyword.fetch!(opts, :param_sep)
     list_sep = Keyword.fetch!(opts, :list_sep)
-    take_multi(url, param_sep, list_sep, _cur_param = param_empty(), _params_acc = [])
+    do_take_multi(url, param_sep, list_sep)
   end
 
-  defp take_multi("", _, _, nil, _acc) do
+  defp do_take_multi("", _, _) do
     {[], ""}
   end
 
-  defp take_multi(url, param_sep, list_sep, _cur_param, _params_acc) when is_binary(url) do
+  defp do_take_multi(url, param_sep, list_sep) do
     {url, rest} = take_allowed(url, param_sep, list_sep, <<>>)
     raw_params = String.split(url, <<param_sep>>)
 
@@ -182,11 +192,9 @@ defmodule Texture.UriTemplate.Matcher do
           ""
 
         bin ->
-          case String.split(bin, "=") do
-            #
+          case String.split(bin, "=", parts: 2) do
             [key, val] -> {:pair, decode(key), decode(maybe_split_list(val, list_sep))}
             [val] -> decode(maybe_split_list(val, list_sep))
-            [_, _, _] -> raise TemplateMatchError, "invalid parameter syntax: #{inspect(bin)}"
           end
       end)
 
@@ -204,20 +212,16 @@ defmodule Texture.UriTemplate.Matcher do
     end
   end
 
-  defp param_empty do
-    nil
-  end
-
   # when taking the part to parse from the URL we are not yet decoding the
   # percent encoded
 
-  defguard is_hexdig(c) when c in ?A..?f or c in ?a..?f or c in ?0..?9
+  defguard is_hexdig(c) when c in ?A..?F or c in ?a..?f or c in ?0..?9
 
   defp take_allowed(<<c::utf8, rest::binary>>, param_sep, list_sep, acc)
        when c in ?A..?Z or
               c in ?a..?z or
               c in ?0..?9 or
-              c in [?-, ?., ?_, ?~, ?!, ?$, ?', ?(, ?), ?*, ?+, ?@] or c == param_sep or c == list_sep do
+              c in [?-, ?., ?_, ?~, ?!, ?$, ?', ?(, ?), ?*, ?+, ?@, ?:] or c == param_sep or c == list_sep do
     take_allowed(rest, param_sep, list_sep, <<acc::binary, c>>)
   end
 
