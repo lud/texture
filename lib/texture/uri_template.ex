@@ -69,7 +69,9 @@ defmodule Texture.UriTemplate do
 
   * Undefined variables are silently omitted.
   * Empty string values may contribute a key without '=' (for certain operators like ';').
-  * Order of exploded map query parameters is not guaranteed (maps are unordered).
+  * Map entries are rendered in an arbitrary order. Pass values as lists of
+    tuples (or keyword lists) to render key/value pairs in a deterministic
+    order.
   """
   @external_resource "priv/grammars/uri-template.abnf"
 
@@ -356,6 +358,20 @@ defmodule Texture.UriTemplate do
       iex> Texture.UriTemplate.render(t, %{num: 0, bool: false})
       "http://example.com/t/0/false"
 
+  ## Ordered Pairs
+
+  Map entries are rendered in an arbitrary order. To render key/value pairs in
+  a deterministic order, pass the value as a list of tuples (or a keyword
+  list). The list order is preserved and duplicate keys are allowed:
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/search{?opts*}")
+      iex> Texture.UriTemplate.render(t, %{opts: [{"b", 2}, {"a", 1}, {"a", 3}]})
+      "http://example.com/search?b=2&a=1&a=3"
+
+      iex> t = Texture.UriTemplate.parse!("http://example.com/search{?opts*}")
+      iex> Texture.UriTemplate.render(t, %{opts: [b: 2, a: 1, a: 3, b: 4]})
+      "http://example.com/search?b=2&a=1&a=3&b=4"
+
   ## Complex Examples
 
       # Mixed expressions with multiple operators
@@ -377,10 +393,11 @@ defmodule Texture.UriTemplate do
   * Map key order is not guaranteed in exploded expansions
   * Empty lists are treated as undefined values and omit the expression
   * Exploding scalar values (e.g., `{var*}`) wraps them in a list
-  * Lists of tuples (including keyword lists) are rendered as maps when exploded
+  * Lists of tuples (including keyword lists) are rendered like maps when
+    exploded, preserving the list order
   * Tuples as standalone values are not supported
   """
-  @spec render(t, %{optional(atom) => term, optional(binary) => term}) :: binary
+  @spec render(t, Enumerable.t({atom | binary, term})) :: binary
   def render(%__MODULE__{} = t, params) do
     Renderer.render(t, params)
   end

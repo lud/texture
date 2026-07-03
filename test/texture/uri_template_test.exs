@@ -745,5 +745,28 @@ defmodule Texture.UriTemplateTest do
       assert "a,1,b,2" = render(parsed, %{foo: %{"a" => 1, "b" => 2}})
       assert "a,1,b,2" = render(parsed, %{foo: %{a: 1, b: 2}})
     end
+
+    test "lists of tuples preserve pair order" do
+      # deterministic alternative to maps, whose entries render in an
+      # arbitrary order
+      assert {:ok, parsed} = parse_template("{?opts*}")
+      assert "?b=2&a=1" = render(parsed, %{opts: [{"b", 2}, {"a", 1}]})
+      assert "?b=2&a=1" = render(parsed, %{opts: [b: 2, a: 1]})
+
+      assert {:ok, parsed} = parse_template("{/opts*}")
+      assert "/b=2/a=1" = render(parsed, %{opts: [{"b", 2}, {"a", 1}]})
+
+      assert {:ok, parsed} = parse_template("{opts*}")
+      assert "b=2,a=1" = render(parsed, %{opts: [{"b", 2}, {"a", 1}]})
+
+      # non exploded pairs are flattened in order
+      assert {:ok, parsed} = parse_template("{opts}")
+      assert "b,2,a,1" = render(parsed, %{opts: [{"b", 2}, {"a", 1}]})
+    end
+
+    test "lists of tuples support duplicate keys" do
+      assert {:ok, parsed} = parse_template("{?opts*}")
+      assert "?x=1&x=2" = render(parsed, %{opts: [{"x", 1}, {"x", 2}]})
+    end
   end
 end
