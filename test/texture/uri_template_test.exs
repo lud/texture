@@ -375,6 +375,24 @@ defmodule Texture.UriTemplateTest do
       assert "/h%20%20/1/2" = render(parsed, %{x: 1, y: 2})
     end
 
+    test "percent encoded characters in variable names" do
+      assert {:ok, parsed} = parse_template("{%41}")
+      assert "ok" = render(parsed, %{"%41" => "ok"})
+
+      assert {:ok, parsed} = parse_template("/x{/a%41b*}")
+      assert "/x/1/2" = render(parsed, %{"a%41b" => [1, 2]})
+
+      assert {:ok, parsed} = parse_template("/x{/%41:2}")
+      assert "/x/ab" = render(parsed, %{"%41" => "abcdef"})
+    end
+
+    test "apostrophe in literals" do
+      # RFC 6570 errata 6937: the literals rule covers %x26-3B, which includes
+      # the apostrophe.
+      assert {:ok, parsed} = parse_template("/it's/{x}")
+      assert "/it's/1" = render(parsed, %{x: 1})
+    end
+
     test "reserved expansion keeps reserved characters" do
       template = "/x/{+var}"
 

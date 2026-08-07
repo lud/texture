@@ -45,6 +45,17 @@ defmodule Texture.UriTemplate.MatcherTest do
       assert %{"foo" => "hello", "bar" => "world"} == match_template!("{foo}/{bar}", "hello/world")
     end
 
+    test "percent encoded characters in variable names" do
+      # the variable name keeps its percent-encoded form
+      assert %{"%41" => "hello"} == match_template!("{%41}", "hello")
+      assert %{"a%41b" => "hello"} == match_template!("{a%41b}", "hello")
+      assert %{"%41" => ["1", "2"]} == match_template!("/x{/%41*}", "/x/1/2")
+    end
+
+    test "apostrophe in literals" do
+      assert %{"x" => "1"} == match_template!("/it's/{x}", "/it's/1")
+    end
+
     test "basic params with list" do
       template = "{foo}"
       values = %{"foo" => [1, 2, 3]}

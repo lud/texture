@@ -182,15 +182,35 @@ defmodule Texture.UriTemplate do
         []
 
       {:varspec, [varname: varname]} ->
-        [{:var, Enum.join(varname), nil}]
+        [{:var, join_varname(varname), nil}]
 
       {:varspec, [varname: varname, explode: "*"]} ->
-        [{:var, Enum.join(varname), :explode}]
+        [{:var, join_varname(varname), :explode}]
 
       {:varspec, [varname: varname, prefix: [":", n_aslist]]} ->
         {max_len, ""} = Integer.parse(List.to_string(n_aslist))
-        [{:var, Enum.join(varname), {:prefix, max_len}}]
+        [{:var, join_varname(varname), {:prefix, max_len}}]
     end)
+  end
+
+  defp join_varname(varname) do
+    IO.iodata_to_binary(normalize_varname(varname))
+  end
+
+  defp normalize_varname([h | t]) do
+    [normalize_varname(h) | normalize_varname(t)]
+  end
+
+  defp normalize_varname(bin) when is_binary(bin) do
+    bin
+  end
+
+  defp normalize_varname({:pct_encoded, list}) do
+    list
+  end
+
+  defp normalize_varname([]) do
+    []
   end
 
   @doc """

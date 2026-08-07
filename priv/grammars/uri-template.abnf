@@ -21,11 +21,15 @@ iprivate       =  %xE000-F8FF / %xF0000-FFFFD / %x100000-10FFFD
 
 URI-Template  = *( literals / expression )
 
-literals      =  %x21 / %x23-24 / %x26 / %x28-3B / %x3D / %x3F-5B
+; RFC 6570 errata 6937 (verified): the published rule reads
+; "%x26 / %x28-3B", which leaves out %x27 (the apostrophe) and limits
+; interoperability with content such as HTML. The range below is the
+; corrected "%x26-3B".
+literals      =  %x21 / %x23-24 / %x26-3B / %x3D / %x3F-5B
               /  %x5D / %x5F / %x61-7A / %x7E / ucschar / iprivate
               /  pct-encoded
                     ; any Unicode character except: CTL, SP,
-                    ;  DQUOTE, "'", "%" (aside from pct-encoded),
+                    ;  DQUOTE, "%" (aside from pct-encoded),
                     ;  "<", ">", "\", "^", "`", "{", "|", "}"
 
 expression    =  "{" [ operator ] variable-list "}"
