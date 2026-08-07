@@ -2,7 +2,7 @@ defmodule Texture.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/lud/texture"
-  @version "1.2.0"
+  @version "1.2.1"
 
   def project do
     [
