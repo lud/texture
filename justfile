@@ -1,6 +1,6 @@
 
 _mix_deps:
-  mix deps.get
+  out=$(mix deps.get) && echo "all dependencies fetched" || { echo "$out"; exit 1; }
 
 test:
   mix test
