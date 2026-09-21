@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-09-21
+
+### 🚀 Features
+
+- [**breaking**] Treat prefixed segments as optional in URI template matcher (_lud_)
+
+### ⚙️ Miscellaneous Tasks
+
+- Limit justfile verbosity on mix.deps (_lud_)
+
 ## [1.2.1] - 2026-08-07
 
 ### 🐛 Bug Fixes

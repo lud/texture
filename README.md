@@ -18,7 +18,7 @@ A collection of structured text parsers used by [JSV](https://github.com/lud/jsv
 ```elixir
 defp deps do
   [
-    {:texture, "~> 1.2"},
+    {:texture, "~> 2.0"},
   ]
 end
 ```
