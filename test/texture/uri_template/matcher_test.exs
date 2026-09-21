@@ -510,6 +510,28 @@ defmodule Texture.UriTemplate.MatcherTest do
                "another" => nil
              } == match_template!(template, "?")
     end
+
+    test "query expression is absent when the url has no query string" do
+      # rendering omits the expression when all its variables are undefined, so
+      # matching the rendered url gives them back as nil
+      template = "/users{?q}"
+      assert "/users" = url = render!(template, %{})
+      assert %{"q" => nil} == match_template!(template, url)
+
+      assert %{"q" => "hello"} == match_template!(template, "/users?q=hello")
+    end
+
+    test "absent query expression with several variables" do
+      template = "/users{?q,lang}"
+      assert "/users" = url = render!(template, %{})
+      assert %{"q" => nil, "lang" => nil} == match_template!(template, url)
+    end
+
+    test "absent exploded query expression" do
+      template = "/users{?opts*}"
+      assert "/users" = url = render!(template, %{})
+      assert %{"opts" => nil} == match_template!(template, url)
+    end
   end
 
   describe "unsupported features - prefix modifiers" do
@@ -893,6 +915,50 @@ defmodule Texture.UriTemplate.MatcherTest do
       assert "/value/" = url = render!(template, values)
       assert %{"foo" => "value"} == match_template!(template, url)
     end
+
+    test "path segment is absent when the url has no such segment" do
+      # rendering omits the expression when its variable is undefined, so
+      # matching the rendered url gives it back as nil
+      template = "/users{/id}"
+      assert "/users" = url = render!(template, %{})
+      assert %{"id" => nil} == match_template!(template, url)
+
+      assert %{"id" => "42"} == match_template!(template, "/users/42")
+    end
+
+    test "a literal slash keeps the segment required" do
+      template = "/users/{id}"
+      assert "/users/" = render!(template, %{})
+
+      assert_raise TemplateMatchError, ~r{could not find literal "/users/"}, fn ->
+        match_template!(template, "/users")
+      end
+    end
+
+    test "absent path segment followed by a literal" do
+      template = "/a{/x}/b"
+      assert "/a/b" = url = render!(template, %{})
+      assert %{"x" => nil} == match_template!(template, url)
+      assert %{"x" => "1"} == match_template!(template, "/a/1/b")
+    end
+
+    test "absent path segment followed by a query expression" do
+      template = "/a{/x}{?q}"
+      assert "/a?q=2" = url = render!(template, %{"q" => 2})
+      assert %{"x" => nil, "q" => "2"} == match_template!(template, url)
+    end
+
+    test "absent path expression with several variables" do
+      template = "/a{/x,y}"
+      assert "/a" = url = render!(template, %{})
+      assert %{"x" => nil, "y" => nil} == match_template!(template, url)
+    end
+
+    test "absent exploded path segment" do
+      template = "/a{/x*}"
+      assert "/a" = url = render!(template, %{})
+      assert %{"x" => nil} == match_template!(template, url)
+    end
   end
 
   describe "error cases - TemplateMatchError" do
@@ -906,14 +972,15 @@ defmodule Texture.UriTemplate.MatcherTest do
       end
     end
 
-    test "expected prefix - missing required prefix character" do
-      # Path segment requires leading slash, error when it's missing
-      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+    test "missing prefix character - expression is absent and consumes nothing" do
+      # Without its leading slash the path segment expression matches nothing,
+      # so the url part is left over and fails the match
+      assert_raise TemplateMatchError, ~r{invalid match before "value"}, fn ->
         match_template!("{/foo}", "value")
       end
 
-      # Query segment requires leading question mark, error when it's missing
-      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+      # Same without the leading question mark of a query expression
+      assert_raise TemplateMatchError, ~r{invalid match before "foo=value"}, fn ->
         match_template!("{?foo}", "foo=value")
       end
     end
@@ -1004,12 +1071,11 @@ defmodule Texture.UriTemplate.MatcherTest do
 
     test "complex error scenarios" do
       # Path template expects slash prefix but doesn't get it
-      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+      assert_raise TemplateMatchError, ~r{invalid match before "resource"}, fn ->
         match_template!("{/resource}", "resource")
       end
 
-      # Ensures prefix matching is strict
-      assert_raise TemplateMatchError, ~r{expected prefix}, fn ->
+      assert_raise TemplateMatchError, ~r{invalid match before "search=term"}, fn ->
         match_template!("{?search}", "search=term")
       end
     end

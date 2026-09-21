@@ -158,18 +158,23 @@ defmodule Texture.UriTemplate.Matcher do
         other -> raise TemplateMatchError, "operator #{inspect(other)} is not supported for matching"
       end
 
-    url_part =
-      case url_part do
-        all when is_nil(prefix) -> all
-        <<^prefix, rest::binary>> -> rest
-        _other -> raise TemplateMatchError, "expected prefix #{<<prefix>>} before #{inspect(url_part)}"
-      end
+    case url_part do
+      all when is_nil(prefix) ->
+        take_and_assign(op, varlist, all, param_sep, list_sep)
 
-    {values, rest} =
-      take_multi(url_part, param_sep: param_sep, list_sep: list_sep)
+      <<^prefix, rest::binary>> ->
+        take_and_assign(op, varlist, rest, param_sep, list_sep)
 
-    kvs = assign_params(op, varlist, values)
-    {Map.new(kvs), rest}
+      # A {/foo} segment is optional: without its prefix it is not matched, and
+      # the url part is left for the next expression or literal.
+      absent ->
+        {Map.new(varlist, fn {:var, name, _} -> {name, nil} end), absent}
+    end
+  end
+
+  defp take_and_assign(op, varlist, url_part, param_sep, list_sep) do
+    {values, rest} = take_multi(url_part, param_sep: param_sep, list_sep: list_sep)
+    {Map.new(assign_params(op, varlist, values)), rest}
   end
 
   @doc false
